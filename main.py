@@ -6,11 +6,12 @@ import random
 import logging
 import schedule
 import traceback
-import re  # Akıllı içerik bölme için eklendi
-# import openai  # Bu satırı tamamen kaldırın
-import importlib  # importlib import'u eklendi
+import re
+import threading
+import http.server
+import socketserver
 import google.generativeai as genai
-from dotenv import load_dotenv  # Eksik import eklendi
+from dotenv import load_dotenv
 from twitter_client import login, post_tweet, post_tweet_thread_v2, post_manual_thread, reply_to_tweet, browse_tweets_v2, human_like_delay, cleanup_browser, initialize_browser
 from datetime import datetime, timedelta
 
@@ -24,15 +25,37 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
-# OpenAI yapılandırma kodunu kaldırın
-# OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-# if OPENAI_API_KEY:
-#     openai.api_key = OPENAI_API_KEY
-
 # Configure Gemini API  
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
+
+# HTTP sunucusu için global değişkenler
+httpd = None
+
+# HTTP sunucusu için basit bir işleyici
+class SimpleHandler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+        self.wfile.write(b'Twitter bot active')
+    
+    def log_message(self, format, *args):
+        # Sustur log mesajlarını
+        return
+
+# HTTP sunucusu başlatma fonksiyonu - asyncio kullanmadan
+def start_http_server():
+    global httpd
+    try:
+        port = int(os.getenv('PORT', 10000))
+        handler = SimpleHandler
+        httpd = socketserver.TCPServer(("", port), handler)
+        logger.info(f"HTTP sunucusu port {port} üzerinde başlatıldı")
+        httpd.serve_forever()
+    except Exception as e:
+        logger.error(f"HTTP sunucu hatası: {e}")
 
 # Global browser and page objects
 browser = None
@@ -116,40 +139,47 @@ def reload_modules():
     except Exception as e:
         logger.error(f"Module reload error: {e}")
 
-def initialize_browser():
-    """Initialize browser and set global variables"""
+def initialize_browser(max_attempts=3, wait_time=5):
+    """Initialize browser with retry logic"""
     global browser, page
     
-    try:
-        if browser is None:
-            logger.info("Initializing browser...")
-            browser, page = login()
-            logger.info("Browser initialized and logged in to Twitter")
-        else:
-            logger.info("Browser already running")
-            
-            # Check if page is still open
-            try:
-                # Simple check - get URL
-                current_url = page.url
-                logger.info(f"Current page URL: {current_url}")
-            except Exception as e:
-                logger.warning(f"Page check error: {e}")
-                logger.info("Opening new page...")
-                page = browser.new_page()
-                page.goto("https://twitter.com/home")
-    except Exception as e:
-        logger.error(f"Browser initialization error: {e}")
-        # Clean up old session and restart
+    for attempt in range(1, max_attempts + 1):
         try:
-            cleanup_browser()
-            browser, page = login()
-            logger.info("Browser restarted")
-        except Exception as restart_e:
-            logger.error(f"Failed to restart browser: {restart_e}")
-            raise  # Re-raise to handle in main
-        
-    return browser, page
+            logger.info(f"Browser initialization attempt {attempt} of {max_attempts}")
+            logger.info("Initializing browser...")
+            
+            # Burada login fonksiyonunu true ile çağırarak headless modu aktif et
+            browser, page = login(headless=True)
+            
+            if browser and page:
+                logger.info("Browser initialized and logged in to Twitter")
+                return browser, page
+            else:
+                raise Exception("Browser or page is None")
+                
+        except Exception as e:
+            logger.error(f"Browser initialization error: {e}")
+            if hasattr(e, 'message') and 'browser has been closed' in str(e.message):
+                logger.error(f"Browser logs:\n{e.message}")
+            try:
+                if browser:
+                    logger.error("Failed to restart browser: {e}")
+                    cleanup_browser(browser)
+                    browser = None
+                    page = None
+            except Exception as cleanup_error:
+                logger.error(f"Error during browser cleanup: {cleanup_error}")
+                
+            logger.error(f"Browser initialization failed on attempt {attempt}: {e}")
+            
+            if attempt < max_attempts:
+                logger.info(f"Waiting {wait_time} seconds before retrying...")
+                time.sleep(wait_time)
+            else:
+                logger.error("Maximum browser initialization attempts reached. Exiting.")
+                return None, None
+    
+    return None, None
 
 def cleanup_browser():
     """Close browser cleanly"""
@@ -735,12 +765,46 @@ def test_mode():
         # Optionally close browser after testing
         cleanup_browser()
 
+# Ana kod bloğu - DOSYANIN EN SONUNA
 if __name__ == "__main__":
-    # Set to False for testing individual functions
-    production_mode = True
-    
-    # For production deployment:
-    if production_mode:
-        main()
-    else:
-        test_mode()
+    try:
+        # HTTP sunucusunu başlat (önce)
+        server_thread = threading.Thread(target=start_http_server, daemon=True)
+        server_thread.start()
+        logger.info("HTTP sunucu thread'i başlatıldı")
+        
+        # Tarayıcıyı başlat
+        browser, page = initialize_browser()
+        
+        # Görevleri planla (varolan kodlarınız)
+        schedule.every(2).hours.do(post_web3_content)
+        schedule.every(1).hours.do(check_tweets_and_reply)
+        
+        # İlk tweet paylaşımını hemen yap
+        post_web3_content()
+        
+        # Görev zamanlayıcı ana döngü
+        while True:
+            try:
+                schedule.run_pending()
+                time.sleep(60)
+            except Exception as e:
+                logger.error(f"Ana döngüde hata: {e}")
+                traceback.print_exc()
+                
+                # Tarayıcı hata verirse yeniden başlatmayı dene
+                try:
+                    cleanup_browser(browser)
+                    browser, page = initialize_browser()
+                except Exception as browser_error:
+                    logger.error(f"Tarayıcı yeniden başlatma hatası: {browser_error}")
+                
+                time.sleep(300)  # Hata durumunda 5 dakika bekle
+                
+    except KeyboardInterrupt:
+        logger.info("Program kullanıcı tarafından sonlandırıldı")
+        cleanup_browser(browser)
+    except Exception as e:
+        logger.error(f"Beklenmeyen hata: {e}")
+        traceback.print_exc()
+        cleanup_browser(browser)

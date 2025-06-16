@@ -42,5 +42,9 @@ COPY . .
 # Çıktıların anında görünmesi için
 ENV PYTHONUNBUFFERED=1
 
+# Xvfb ile başlatmak için start.sh oluştur
+RUN echo '#!/bin/bash\nXvfb :99 -screen 0 1280x720x24 &\nexport DISPLAY=:99\npython main.py' > start.sh && \
+    chmod +x start.sh
+
 # Uygulamayı çalıştır
-CMD ["python", "main.py"]
+CMD ["./start.sh"]
