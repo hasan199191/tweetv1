@@ -14,6 +14,7 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 from twitter_client import login, post_tweet, post_tweet_thread_v2, post_manual_thread, reply_to_tweet, browse_tweets_v2, human_like_delay, cleanup_browser, initialize_browser
 from datetime import datetime, timedelta
+import subprocess  # Yeni eklenen: subprocess modülü
 
 # Logging configuration
 logging.basicConfig(level=logging.INFO, 

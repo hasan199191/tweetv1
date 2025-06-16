@@ -22,10 +22,15 @@ RUN apt-get update && apt-get install -y \
     libasound2 \
     xvfb \
     git \
+    nodejs \
+    npm \
     && rm -rf /var/lib/apt/lists/*
 
 # Pip'i güncelle
 RUN pip install --upgrade pip
+
+# Google API için ekstra paket
+RUN pip install --upgrade google-api-python-client google-auth-httplib2 google-auth-oauthlib
 
 # Gereksinimler
 COPY requirements.txt .

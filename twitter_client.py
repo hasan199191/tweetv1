@@ -5,6 +5,7 @@ import json
 import pathlib
 from playwright.sync_api import sync_playwright, expect
 import re  # Import re for regular expression operations
+from email_reader import get_twitter_verification_code
 
 # Create directory to store browser session data
 USER_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "browser_profile")
@@ -108,7 +109,7 @@ def login(headless=True):
         p = sync_playwright().start()
         browser_type = p.chromium
         
-        # Render için gelişmiş tarayıcı ayarları
+        # Stealth browser launch settings
         browser = browser_type.launch(
             headless=headless,
             args=[
@@ -118,176 +119,182 @@ def login(headless=True):
                 '--disable-accelerated-2d-canvas',
                 '--disable-gpu',
                 '--window-size=1280,720',
+                '--disable-web-security',
+                '--disable-features=IsolateOrigins,site-per-process',
                 '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
             ]
         )
         
-        # Gizlilik korumalı içerik ayarı
+        # Set the context with more realistic browser settings
         context = browser.new_context(
             viewport={'width': 1280, 'height': 720},
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
             locale='en-US',
+            timezone_id='America/New_York',
+            geolocation={'longitude': -74.006, 'latitude': 40.7128},
+            permissions=['geolocation']
         )
         
-        # Sayfayı oluştur
+        # Enable stealth mode via JavaScript
+        context.add_init_script("""
+        Object.defineProperty(navigator, 'webdriver', {
+          get: () => false,
+        });
+        window.chrome = {
+          runtime: {},
+        };
+        """)
+        
+        # Create page with increased timeout
         page = context.new_page()
+        page.set_default_timeout(60000)  # 60 seconds
         
-        # Timeout değeri artırma
-        page.set_default_timeout(60000)  # 60 saniye
-        
-        # Twitter hesap bilgileri
+        # Twitter credentials
         username = os.environ.get("TWITTER_USER", "")
         password = os.environ.get("TWITTER_PASS", "")
         
-        # Önceden giriş yapılıp yapılmadığını kontrol et
-        print("Checking if already logged in...")
+        # Direct login attempt - new algorithm
         try:
-            page.goto("https://twitter.com/home", timeout=30000)
-            current_url = page.url
-            print(f"Current URL: {current_url} - {'looks like a logged-in URL' if 'home' in current_url else 'not logged in'}")
+            # Go to login page directly
+            print("Going to Twitter login page...")
+            page.goto("https://twitter.com/i/flow/login", wait_until="networkidle", timeout=60000)
+            page.wait_for_load_state("networkidle")
+            page.screenshot(path="login_page.png")
             
-            # Debug için screenshot
-            page.screenshot(path="debug_screenshot.png")
-            print("Debug screenshot saved")
+            # Wait for username field
+            print("Waiting for username field...")
+            username_selector = "input[autocomplete='username']"
+            page.wait_for_selector(username_selector, state="visible", timeout=15000)
             
-            # Giriş yapmış görünüyor mu?
-            is_logged_in = False
+            # Fill username field
+            print(f"Entering username: {username}")
+            username_field = page.query_selector(username_selector)
+            if not username_field:
+                raise Exception("Username field not found")
             
-            # Twitter'ın tweet oluşturma butonunu ara
+            username_field.click()
+            page.wait_for_timeout(1000)
+            username_field.fill("")  # Clear field
+            page.wait_for_timeout(500)
+            type_human_like(username_field, username)
+            page.wait_for_timeout(2000)
+            
+            # Click next button
+            next_button = page.query_selector("div[role='button']:has-text('Next')")
+            if next_button:
+                next_button.click()
+            else:
+                print("Next button not found, pressing Enter...")
+                page.keyboard.press("Enter")
+            
+            # Wait for password field
+            page.wait_for_timeout(3000)
+            
+            # Check if there's a verification screen
             try:
-                tweet_button = page.query_selector("a[data-testid='SideNav_NewTweet_Button']")
-                if tweet_button:
-                    print("Found tweet compose button: a[data-testid='SideNav_NewTweet_Button']")
-                    is_logged_in = True
-            except:
-                pass
-                
-            # Profil elementini ara
-            try:
-                profile_button = page.query_selector("a[data-testid='AppTabBar_Profile_Link']")
-                if profile_button:
-                    print("Found profile element: a[data-testid='AppTabBar_Profile_Link']")
-                    is_logged_in = True
-            except:
-                pass
-                
-            # Twitter başlığını ara
-            try:
-                header = page.query_selector("h1[role='heading']")
-                if header and ("Home" in header.inner_text() or "Twitter" in header.inner_text()):
-                    print("Found Twitter header")
-                    is_logged_in = True
-            except:
-                pass
-                
-            if is_logged_in:
-                print("Already logged in, skipping login process")
-                return browser, page
-                
-            print("Not logged in or couldn't confirm login status, proceeding with login...")
-            
-        except Exception as e:
-            print(f"Error checking login status: {e}")
-            print("Proceeding with login process...")
-        
-        # Login sayfasına git
-        print("Navigating to login page...")
-        page.goto("https://twitter.com/login", timeout=30000)
-        human_like_delay(2000, 4000)
-        
-        # Kullanıcı adını gir
-        print("Entering username...")
-        try:
-            # Modern Twitter arayüzü için
-            username_field = page.query_selector("input[autocomplete='username']")
-            if username_field:
-                print(f"Entering username: {username}")
-                type_human_like(username_field, username)
-                print("Looking for Next button...")
-                
-                # Next butonunu ara
-                next_button = None
-                try:
+                verification_field = page.query_selector("input[data-testid='ocfEnterTextTextInput']")
+                if verification_field:
+                    email = os.environ.get("TWITTER_EMAIL", "")
+                    print(f"Email verification required for: {email}")
+                    
+                    # Önce email gir
+                    verification_field.click()
+                    verification_field.fill("")
+                    type_human_like(verification_field, email)
+                    page.wait_for_timeout(1000)
+                    
+                    # Next butonunu tıkla
                     next_button = page.query_selector("div[role='button']:has-text('Next')")
                     if next_button:
                         next_button.click()
                     else:
-                        print("Next button not found, trying enter key...")
                         page.keyboard.press("Enter")
-                except Exception as button_error:
-                    print(f"Next button error: {button_error}")
-                    # Enter tuşunu dene
-                    page.keyboard.press("Enter")
-                
-                human_like_delay(2000, 3000)
-                
-                # Alternatif yol: X arayüzü
-                if not page.query_selector("input[name='password']"):
-                    # Belki kimlik doğrulama ekranına yönlendirildik, telefon/email kontrolü gerekiyor
-                    try:
-                        # Eğer email doğrulama isterse
-                        email_field = page.query_selector("input[data-testid='ocfEnterTextTextInput']")
-                        if email_field:
-                            email = os.environ.get("TWITTER_EMAIL", "")
-                            print(f"Email verification required, entering: {email}")
-                            type_human_like(email_field, email)
+                    
+                    page.wait_for_timeout(3000)
+                    
+                    # Doğrulama kodu giriş alanını kontrol et
+                    verification_code_field = page.query_selector("input[data-testid='ocfEnterTextTextInput']")
+                    if verification_code_field:
+                        # Email'den doğrulama kodunu otomatik al
+                        verification_code = get_twitter_verification_code()
+                        
+                        if verification_code:
+                            print(f"Entering verification code: {verification_code}")
+                            verification_code_field.click()
+                            verification_code_field.fill("")
+                            type_human_like(verification_code_field, verification_code)
                             
-                            # Next butonunu ara ve tıkla
+                            # Next butonunu tıkla
                             next_button = page.query_selector("div[role='button']:has-text('Next')")
                             if next_button:
                                 next_button.click()
                             else:
                                 page.keyboard.press("Enter")
-                                
-                            human_like_delay(2000, 3000)
-                    except Exception as verify_error:
-                        print(f"Verification handling error: {verify_error}")
-                
-                # Şifre girişi
-                print("Entering password...")
-                password_field = page.query_selector("input[name='password']")
-                if password_field:
-                    type_human_like(password_field, password)
-                    human_like_delay(500, 1000)
-                    
-                    # Login butonuna tıkla veya Enter tuşuna bas
-                    try:
-                        login_button = page.query_selector("div[role='button']:has-text('Log in')")
-                        if login_button:
-                            login_button.click()
+                        
+                            page.wait_for_timeout(3000)
                         else:
-                            page.keyboard.press("Enter")
-                    except:
-                        page.keyboard.press("Enter")
-                        
-                    print("Waiting for homepage to load...")
-                    try:
-                        # Ana sayfanın yüklenmesini bekle
-                        page.wait_for_url("**/home", timeout=30000)
-                        print("Successfully logged in!")
-                    except Exception as home_error:
-                        print(f"Homepage couldn't load: {home_error}")
-                        # Hata durumunda ekran görüntüsü al
-                        page.screenshot(path="login_error.png")
-                        print("Error screenshot saved: login_error.png")
-                        
-                        # Yine de devam et, belki giriş başarılıdır
+                            print("Verification code could not be obtained!")
                 else:
-                    print("Password field not found")
-                    page.screenshot(path="login_error_no_password.png")
+                    print("No verification needed or error: {verify_error}")
+            except Exception as verify_error:
+                print(f"Verification handling error: {verify_error}")
+            
+            # Password field
+            print("Looking for password field...")
+            password_selector = "input[name='password']"
+            page.wait_for_selector(password_selector, state="visible", timeout=15000)
+            
+            password_field = page.query_selector(password_selector)
+            if not password_field:
+                raise Exception("Password field not found")
+            
+            print("Entering password...")
+            password_field.click()
+            page.wait_for_timeout(1000)
+            password_field.fill("")
+            page.wait_for_timeout(500)
+            type_human_like(password_field, password)
+            page.wait_for_timeout(2000)
+            
+            # Click login button
+            login_button = page.query_selector("div[role='button']:has-text('Log in')")
+            if login_button:
+                login_button.click()
             else:
-                print("Username field not found")
-                page.screenshot(path="login_error_no_username.png")
-                
+                print("Login button not found, pressing Enter...")
+                page.keyboard.press("Enter")
+            
+            # Wait for login to complete
+            print("Waiting for login to complete...")
+            page.wait_for_timeout(10000)
+            
+            # Take screenshot for debugging
+            page.screenshot(path="after_login.png")
+            
+            # Check if login successful by trying to access home
+            page.goto("https://twitter.com/home", timeout=30000)
+            page.wait_for_timeout(5000)
+            
+            # Take another screenshot
+            page.screenshot(path="home_page.png")
+            
+            # Check login status
+            if "home" in page.url:
+                print("Login successful!")
+            else:
+                print(f"Login might have failed. Current URL: {page.url}")
+            
+            return browser, page
+            
         except Exception as login_error:
-            print(f"Login process error: {login_error}")
-            page.screenshot(path="login_process_error.png")
-        
-        return browser, page
-        
+            print(f"Login error: {login_error}")
+            page.screenshot(path="login_error.png")
+            
+            # Still return browser and page - some operations might still work
+            return browser, page
+    
     except Exception as e:
         print(f"Browser initialization error: {e}")
-        # Mevcut browser'ı temizle
         if 'browser' in locals() and browser:
             browser.close()
         raise e
