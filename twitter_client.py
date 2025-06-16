@@ -108,231 +108,189 @@ def login(headless=True):
         p = sync_playwright().start()
         browser_type = p.chromium
         
-        # Render için uygun browser ayarları
+        # Render için gelişmiş tarayıcı ayarları
         browser = browser_type.launch(
             headless=headless,
             args=[
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
                 '--disable-gpu',
                 '--window-size=1280,720',
+                '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
             ]
         )
-
-        # Open a new page
-        page = browser.new_page()
         
-        # First navigate to Twitter homepage
+        # Gizlilik korumalı içerik ayarı
+        context = browser.new_context(
+            viewport={'width': 1280, 'height': 720},
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+            locale='en-US',
+        )
+        
+        # Sayfayı oluştur
+        page = context.new_page()
+        
+        # Timeout değeri artırma
+        page.set_default_timeout(60000)  # 60 saniye
+        
+        # Twitter hesap bilgileri
+        username = os.environ.get("TWITTER_USER", "")
+        password = os.environ.get("TWITTER_PASS", "")
+        
+        # Önceden giriş yapılıp yapılmadığını kontrol et
+        print("Checking if already logged in...")
         try:
-            print("Checking if already logged in...")
             page.goto("https://twitter.com/home", timeout=30000)
-            human_like_delay(3000, 5000)
+            current_url = page.url
+            print(f"Current URL: {current_url} - {'looks like a logged-in URL' if 'home' in current_url else 'not logged in'}")
             
-            # Check for home view indicators
-            logged_in = False
+            # Debug için screenshot
+            page.screenshot(path="debug_screenshot.png")
+            print("Debug screenshot saved")
             
-            # Check URL first - fastest method
-            if "home" in page.url or page.url.endswith("twitter.com") or page.url.endswith("x.com") or "x.com/home" in page.url:
-                print(f"Current URL: {page.url} - looks like a logged-in URL")
+            # Giriş yapmış görünüyor mu?
+            is_logged_in = False
+            
+            # Twitter'ın tweet oluşturma butonunu ara
+            try:
+                tweet_button = page.query_selector("a[data-testid='SideNav_NewTweet_Button']")
+                if tweet_button:
+                    print("Found tweet compose button: a[data-testid='SideNav_NewTweet_Button']")
+                    is_logged_in = True
+            except:
+                pass
                 
-                # Take screenshot for debugging
-                try:
-                    page.screenshot(path="debug_login_check.png")
-                    print("Debug screenshot saved")
-                except Exception as e:
-                    print(f"Screenshot error: {e}")
-            
-                # Further verify by checking for tweet compose button
-                try:
-                    compose_selectors = [
-                        "a[data-testid='SideNav_NewTweet_Button']",
-                        "div[role='button'][data-testid='tweetButtonInline']",
-                        "a[href='/compose/tweet']"
-                    ]
-                    
-                    for selector in compose_selectors:
-                        if page.query_selector(selector):
-                            print(f"Found tweet compose button: {selector}")
-                            logged_in = True
-                            break
-                except Exception as e:
-                    print(f"Error checking compose button: {e}")
+            # Profil elementini ara
+            try:
+                profile_button = page.query_selector("a[data-testid='AppTabBar_Profile_Link']")
+                if profile_button:
+                    print("Found profile element: a[data-testid='AppTabBar_Profile_Link']")
+                    is_logged_in = True
+            except:
+                pass
                 
-                # Check for profile elements 
-                try:
-                    profile_selectors = [
-                        "div[data-testid='AppTabBar_Profile_Link']",
-                        "a[data-testid='AppTabBar_Profile_Link']",
-                        "a[aria-label='Profile']"
-                    ]
-                    
-                    for selector in profile_selectors:
-                        if page.query_selector(selector):
-                            print(f"Found profile element: {selector}")
-                            logged_in = True
-                            break
-                except Exception as e:
-                    print(f"Error checking profile elements: {e}")
+            # Twitter başlığını ara
+            try:
+                header = page.query_selector("h1[role='heading']")
+                if header and ("Home" in header.inner_text() or "Twitter" in header.inner_text()):
+                    print("Found Twitter header")
+                    is_logged_in = True
+            except:
+                pass
                 
-                # Check for Twitter header
-                try:
-                    if page.query_selector("header[role='banner']"):
-                        print("Found Twitter header")
-                        
-                        # Check if there's a logout button in sidebar
-                        sidebar_text = page.query_selector("div[data-testid='sidebarColumn']")
-                        if sidebar_text and "Log out" in sidebar_text.inner_text():
-                            print("Found 'Log out' text in sidebar")
-                            logged_in = True
-                except Exception as e:
-                    print(f"Error checking header: {e}")
-            
-            # If we're logged in, return the browser and page
-            if logged_in:
+            if is_logged_in:
                 print("Already logged in, skipping login process")
                 return browser, page
-            
+                
             print("Not logged in or couldn't confirm login status, proceeding with login...")
             
         except Exception as e:
             print(f"Error checking login status: {e}")
-            # Continue with login process
+            print("Proceeding with login process...")
         
-        # Login process
+        # Login sayfasına git
+        print("Navigating to login page...")
+        page.goto("https://twitter.com/login", timeout=30000)
+        human_like_delay(2000, 4000)
+        
+        # Kullanıcı adını gir
+        print("Entering username...")
         try:
-            print("Navigating to login page...")
-            page.goto("https://twitter.com/i/flow/login", timeout=30000)
-            human_like_delay(2000, 3000)
-            
-            # First step - enter username instead of email
-            print("Entering username...")
-            page.wait_for_selector("input[name='text']", state="visible", timeout=15000)
-            human_like_delay()
-            
-            # Use username from env
-            username = os.getenv("TWITTER_USER", "chefcryptoz")
-            print(f"Entering username: {username}")
-            type_like_human(page, "input[name='text']", username)
-            human_like_delay(1000, 2000)
-            
-            # Click Next button
-            print("Looking for Next button...")
-            next_button_selectors = [
-                "div[role='button']:has-text('Next')",
-                "div[data-testid='LoginForm_Forward_Button']"
-            ]
-            
-            next_button_found = False
-            for selector in next_button_selectors:
-                try:
-                    button = page.query_selector(selector)
-                    if button:
-                        print(f"Next button found: {selector}")
-                        button.click()
-                        next_button_found = True
-                        break
-                except Exception as e:
-                    print(f"This selector couldn't be clicked {selector}: {e}")
-            
-            if not next_button_found:
-                # Alternative - press enter
-                print("Next button not found, trying enter key...")
-                page.press("input[name='text']", "Enter")
-            
-            human_like_delay(3000, 5000)
-            
-            # Check for verification code prompt
-            verify_selectors = [
-                "input[data-testid='ocfEnterTextTextInput']",
-                "div:has-text('Verification code')"
-            ]
-            
-            for selector in verify_selectors:
-                try:
-                    if page.query_selector(selector):
-                        print("Email verification code requested!")
-                        # Access email to get verification code
-                        verification_code = input("Please enter the verification code from your email: ")
-                        
-                        # Enter verification code
-                        code_input_selectors = [
-                            "input[data-testid='ocfEnterTextTextInput']",
-                            "input[type='text']"
-                        ]
-                        
-                        for input_selector in code_input_selectors:
-                            try:
-                                if page.query_selector(input_selector):
-                                    type_like_human(page, input_selector, verification_code)
-                                    page.press(input_selector, "Enter")
-                                    break
-                            except:
-                                continue
-                        
-                        human_like_delay(3000, 5000)
-                        break
-                except:
-                    continue
-            
-            # Password entry
-            print("Entering password...")
-            try:
-                page.wait_for_selector("input[name='password']", state="visible", timeout=15000)
-                human_like_delay()
-                password = os.getenv("TWITTER_PASS", "Nuray1965+")
-                type_like_human(page, "input[name='password']", password)
-                human_like_delay(1000, 2000)
+            # Modern Twitter arayüzü için
+            username_field = page.query_selector("input[autocomplete='username']")
+            if username_field:
+                print(f"Entering username: {username}")
+                type_human_like(username_field, username)
+                print("Looking for Next button...")
                 
-                # Click login button
-                login_button_selectors = [
-                    "div[data-testid='LoginForm_Login_Button']",
-                    "div[role='button']:has-text('Log in')"
-                ]
+                # Next butonunu ara
+                next_button = None
+                try:
+                    next_button = page.query_selector("div[role='button']:has-text('Next')")
+                    if next_button:
+                        next_button.click()
+                    else:
+                        print("Next button not found, trying enter key...")
+                        page.keyboard.press("Enter")
+                except Exception as button_error:
+                    print(f"Next button error: {button_error}")
+                    # Enter tuşunu dene
+                    page.keyboard.press("Enter")
                 
-                login_button_found = False
-                for selector in login_button_selectors:
+                human_like_delay(2000, 3000)
+                
+                # Alternatif yol: X arayüzü
+                if not page.query_selector("input[name='password']"):
+                    # Belki kimlik doğrulama ekranına yönlendirildik, telefon/email kontrolü gerekiyor
                     try:
-                        button = page.query_selector(selector)
-                        if button:
-                            button.click()
-                            login_button_found = True
-                            break
+                        # Eğer email doğrulama isterse
+                        email_field = page.query_selector("input[data-testid='ocfEnterTextTextInput']")
+                        if email_field:
+                            email = os.environ.get("TWITTER_EMAIL", "")
+                            print(f"Email verification required, entering: {email}")
+                            type_human_like(email_field, email)
+                            
+                            # Next butonunu ara ve tıkla
+                            next_button = page.query_selector("div[role='button']:has-text('Next')")
+                            if next_button:
+                                next_button.click()
+                            else:
+                                page.keyboard.press("Enter")
+                                
+                            human_like_delay(2000, 3000)
+                    except Exception as verify_error:
+                        print(f"Verification handling error: {verify_error}")
+                
+                # Şifre girişi
+                print("Entering password...")
+                password_field = page.query_selector("input[name='password']")
+                if password_field:
+                    type_human_like(password_field, password)
+                    human_like_delay(500, 1000)
+                    
+                    # Login butonuna tıkla veya Enter tuşuna bas
+                    try:
+                        login_button = page.query_selector("div[role='button']:has-text('Log in')")
+                        if login_button:
+                            login_button.click()
+                        else:
+                            page.keyboard.press("Enter")
                     except:
-                        pass
-                
-                if not login_button_found:
-                    # Alternative - press enter
-                    page.press("input[name='password']", "Enter")
-                
-                # Wait for homepage to load
-                print("Waiting for homepage to load...")
-                try:
-                    page.wait_for_url(["**/home", "https://twitter.com", "https://x.com/home"], timeout=30000)
-                    print("Twitter session successfully opened")
-                except Exception as e:
-                    print(f"Homepage couldn't load: {e}")
-                    # Take screenshot
+                        page.keyboard.press("Enter")
+                        
+                    print("Waiting for homepage to load...")
                     try:
+                        # Ana sayfanın yüklenmesini bekle
+                        page.wait_for_url("**/home", timeout=30000)
+                        print("Successfully logged in!")
+                    except Exception as home_error:
+                        print(f"Homepage couldn't load: {home_error}")
+                        # Hata durumunda ekran görüntüsü al
                         page.screenshot(path="login_error.png")
                         print("Error screenshot saved: login_error.png")
-                    except Exception as scr_e:
-                        print(f"Could not save screenshot: {scr_e}")
-            except Exception as e:
-                print(f"Password entry error: {e}")
-        
-        except Exception as e:
-            print(f"Login error: {e}")
-            try:
-                page.screenshot(path="login_process_error.png")
-                print("Error screenshot saved: login_process_error.png")
-            except Exception as scr_e:
-                print(f"Could not save screenshot: {scr_e}")
+                        
+                        # Yine de devam et, belki giriş başarılıdır
+                else:
+                    print("Password field not found")
+                    page.screenshot(path="login_error_no_password.png")
+            else:
+                print("Username field not found")
+                page.screenshot(path="login_error_no_username.png")
+                
+        except Exception as login_error:
+            print(f"Login process error: {login_error}")
+            page.screenshot(path="login_process_error.png")
         
         return browser, page
+        
     except Exception as e:
-        print(f"Error initializing browser: {e}")
-        return None, None
+        print(f"Browser initialization error: {e}")
+        # Mevcut browser'ı temizle
+        if 'browser' in locals() and browser:
+            browser.close()
+        raise e
 
 def get_verification_code():
     """Access email to get verification code"""
@@ -457,29 +415,79 @@ def post_tweet_thread_v2(page, tweets_content):
         print(f"Posting first tweet: {first_tweet[:50]}...")
         
         # Navigate to Twitter compose
-        page.goto("https://twitter.com/compose/tweet")
-        human_like_delay(2000, 3000)
+        page.goto("https://twitter.com/compose/tweet", timeout=30000)
+        human_like_delay(5000, 7000)  # Daha uzun bekleme
         
-        # Enter first tweet text
+        # Enter first tweet text - multiple ways to find text area
         text_area_found = False
+        
+        # Daha fazla seçici ile deneme
         textarea_selectors = [
             "div[data-testid='tweetTextarea_0']",
             "div[role='textbox'][contenteditable='true']",
-            "div[aria-label='Post text']"
+            "div[aria-label='Post text']",
+            "div[aria-label='Tweet text']",
+            "div[aria-label='Gönderi metni']",  # Türkçe arayüz için
+            "div.public-DraftEditor-content",
+            "div.DraftEditor-root div[contenteditable='true']"
         ]
         
         for selector in textarea_selectors:
             try:
+                # Daha güvenilir bir seçici kullanım yöntemi
+                page.wait_for_selector(selector, state='visible', timeout=10000)
                 text_area = page.query_selector(selector)
                 if text_area:
+                    # Önce tıkla
                     text_area.click()
+                    human_like_delay(1000, 2000)
+                    
+                    # Temizle ve içeriği gir
+                    text_area.fill("")
                     human_like_delay(500, 1000)
+                    
+                    # İçeriği gir
                     text_area.fill(first_tweet)
                     text_area_found = True
                     print(f"First tweet content entered with selector: {selector}")
                     break
             except Exception as e:
                 print(f"Textarea error with selector {selector}: {e}")
+        
+        # JavaScript ile deneme
+        if not text_area_found:
+            try:
+                text_area_found = page.evaluate("""() => {
+                    // Tüm potansiyel text area'ları ara
+                    const textboxes = document.querySelectorAll('div[role="textbox"], div[contenteditable="true"]');
+                    console.log('Found potential textareas:', textboxes.length);
+                    
+                    if (textboxes.length > 0) {
+                        for (const textbox of textboxes) {
+                            try {
+                                textbox.focus();
+                                textbox.click();
+                                // İçeriği temizle
+                                textbox.innerHTML = '';
+                                return true;
+                            } catch (e) {
+                                console.error('Error focusing textbox:', e);
+                            }
+                        }
+                    }
+                    return false;
+                }""")
+                
+                if text_area_found:
+                    print("Found and focused textarea using JavaScript")
+                    # Şimdi içeriği gir
+                    page.keyboard.type(first_tweet)
+                    human_like_delay(1000, 2000)
+                    print("First tweet content entered using JavaScript keyboard input")
+                else:
+                    print("No textarea found even with JavaScript")
+            except Exception as js_error:
+                print(f"JavaScript error: {js_error}")
         
         if not text_area_found:
             print("Could not find text area for first tweet")
