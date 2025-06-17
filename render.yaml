@@ -4,15 +4,18 @@ services:
     env: docker
     buildCommand: null  # Dockerfile ile yapılacak
     startCommand: null  # Dockerfile ile yapılacak
+    plan: free
     envVars:
       - key: GEMINI_API_KEY
         sync: false
-      - key: TWITTER_USER
-        sync: false
-      - key: TWITTER_PASS
-        sync: false
-      - key: TWITTER_EMAIL
+      - key: EMAIL_USER
         sync: false
       - key: EMAIL_PASS
         sync: false
+      - key: TWITTER_USERNAME
+        sync: false
+      - key: TWITTER_PASSWORD
+        sync: false
     autoDeploy: true
+    healthCheckPath: /
+    port: 10000

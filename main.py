@@ -148,13 +148,16 @@ async def initialize_browser(max_attempts=3, wait_time=5):
     """Initialize browser with retry logic using Async API"""
     global browser, page
 
+    # Check if we're running in production (Render) or local development
+    is_production = os.environ.get('RENDER', False)
+
     for attempt in range(1, max_attempts + 1):
         try:
             logger.info(f"Browser initialization attempt {attempt} of {max_attempts}")
             logger.info("Initializing browser...")
 
-            # Call async login function with headless=False
-            browser, page = await login(headless=False)  # Set to False to see the browser
+            # Use headless mode in production, non-headless in development
+            browser, page = await login(headless=True if is_production else False)
 
             if browser and page:
                 logger.info("Browser initialized and logged in to Twitter")
@@ -164,22 +167,22 @@ async def initialize_browser(max_attempts=3, wait_time=5):
 
         except Exception as e:
             logger.error(f"Browser initialization error: {e}")
+            if hasattr(e, 'message'):
+                logger.error(f"Browser logs:\n{e.message}")
             try:
                 if browser:
-                    logger.error(f"Failed to restart browser: {e}")
                     await cleanup_browser(browser)
-                    browser = None
-                    page = None
             except Exception as cleanup_error:
-                logger.error(f"Error during browser cleanup: {cleanup_error}")
-
-            logger.error(f"Browser initialization failed on attempt {attempt}: {e}")
+                logger.error(f"Failed to cleanup browser: {cleanup_error}")
 
             if attempt < max_attempts:
                 logger.info(f"Waiting {wait_time} seconds before retrying...")
                 await asyncio.sleep(wait_time)
-
-    raise Exception("Failed to initialize browser after maximum attempts")
+            else:
+                logger.error(f"Browser initialization failed on attempt {attempt}: {e}")
+                if hasattr(e, 'message'):
+                    logger.error(f"Browser logs:\n{e.message}")
+                raise
 
 def cleanup_browser(browser):
     """Close browser cleanly"""
