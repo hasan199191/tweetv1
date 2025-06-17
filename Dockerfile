@@ -1,10 +1,17 @@
 FROM mcr.microsoft.com/playwright/python:v1.40.0-focal
 
+# Update Python to 3.9+
+RUN apt-get update && apt-get install -y python3.9
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1
+
 WORKDIR /app
+
+# Install pip for Python 3.9
+RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py && python3.9 get-pip.py
 
 # Install dependencies
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN python3.9 -m pip install -r requirements.txt
 
 # Copy source code
 COPY . .
@@ -19,4 +26,4 @@ RUN playwright install chromium
 ENV PYTHONUNBUFFERED=1
 
 # Run the bot
-CMD ["python", "main.py"]
+CMD ["python3.9", "main.py"]
