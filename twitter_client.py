@@ -143,4 +143,33 @@ def login(headless=False):
             cleanup_browser(browser)
         return None, None
 
-# ... rest of existing code ...
+def post_tweet_thread_v2(page, content):
+    """Post a thread of tweets"""
+    try:
+        print(f"Posting first tweet: {content[:50]}...")
+        
+        # Navigate to compose tweet
+        page.goto("https://twitter.com/compose/tweet", wait_until="domcontentloaded")
+        time.sleep(2)
+        
+        # Find and fill tweet input
+        tweet_input = page.locator("div[data-testid='tweetTextarea_0']")
+        if not tweet_input:
+            print("Could not find text area for first tweet")
+            return False
+            
+        tweet_input.fill(content)
+        time.sleep(1)
+        
+        # Click tweet button
+        post_button = page.locator("[data-testid='tweetButton']")
+        if post_button:
+            post_button.click()
+            time.sleep(3)
+            return True
+            
+        return False
+        
+    except Exception as e:
+        logger.error(f"Error posting thread: {e}")
+        return False
