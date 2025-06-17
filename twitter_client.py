@@ -344,3 +344,142 @@ async def post_tweet_thread_v2(page, content):
         logger.error(f"Error in post_tweet_thread_v2: {e}")
         await take_error_screenshot(page, "tweet_thread_error.png")
         return False
+
+async def browse_tweets_v2(page, account, limit=1):
+    """Browse a user's profile and return their latest tweets."""
+    try:
+        logger.info(f"Checking tweets from {account} account...")
+
+        # Go to user's profile
+        await page.goto(f"https://twitter.com/{account}", wait_until="networkidle")
+        await asyncio.sleep(3)
+
+        # Wait for tweets to load
+        logger.info("Waiting for tweets to load...")
+        try:
+            await page.wait_for_selector("[data-testid='primaryColumn']", timeout=30000)
+            await page.wait_for_selector("article[data-testid='tweet']", timeout=30000)
+        except Exception as wait_error:
+            logger.error(f"Timeout waiting for tweets: {wait_error}")
+            await take_error_screenshot(page, f"tweets_timeout_{account}.png")
+            return []
+
+        # Add multiple small scrolls with delays
+        for _ in range(3):
+            await page.evaluate("window.scrollBy(0, 300)")
+            await asyncio.sleep(2)
+
+        # Extract tweet data
+        tweets = await page.evaluate("""() => {
+            const tweets = [];
+            const articles = document.querySelectorAll("article[data-testid='tweet']");
+            
+            for (const article of articles) {
+                try {
+                    // Get tweet text
+                    let tweetText = "";
+                    const textElement = article.querySelector("[data-testid='tweetText']") || 
+                                      article.querySelector("[lang]:not([data-testid])");
+                    if (textElement) {
+                        tweetText = textElement.textContent.trim();
+                    }
+
+                    // Get tweet URL and timestamp
+                    const timeElement = article.querySelector("time");
+                    const urlElement = timeElement ? timeElement.closest("a") : null;
+                    const tweetUrl = urlElement ? urlElement.href : "";
+                    const timestamp = timeElement ? timeElement.getAttribute("datetime") : "";
+
+                    if (tweetText || tweetUrl) {
+                        tweets.push({
+                            text: tweetText,
+                            url: tweetUrl,
+                            timestamp: timestamp
+                        });
+                    }
+                } catch (error) {
+                    console.error("Error processing tweet:", error);
+                }
+            }
+            return tweets;
+        }""")
+
+        logger.info(f"Found {len(tweets)} tweets for {account}")
+        if not tweets:
+            logger.warning(f"No tweets found for {account} after extraction")
+            content = await page.content()
+            logger.debug(f"Page content sample: {content[:200]}...")
+            return []
+
+        return tweets[:limit]
+
+    except Exception as e:
+        logger.error(f"Error browsing tweets for {account}: {e}")
+        await take_error_screenshot(page, f"browse_error_{account}.png")
+        return []
+
+async def reply_to_tweet(page, tweet_url, reply_text):
+    """Reply to a specific tweet."""
+    try:
+        logger.info(f"Navigating to tweet URL: {tweet_url}")
+        await page.goto(tweet_url.replace("x.com", "twitter.com"), wait_until="networkidle")
+        await asyncio.sleep(3)
+
+        logger.info("Looking for reply button...")
+        reply_button_selectors = [
+            "div[data-testid='reply']",
+            "[aria-label='Reply']",
+            "div[role='button']:has-text('Reply')"
+        ]
+
+        if not await wait_for_and_click(page, reply_button_selectors, timeout=15000):
+            logger.error("Reply button not found")
+            await take_error_screenshot(page, "reply_button_error.png")
+            return False
+
+        await asyncio.sleep(2)
+
+        # Wait for and fill the reply textarea
+        textarea_selectors = [
+            "[data-testid='tweetTextarea_0']",
+            "div[role='textbox']",
+            "[contenteditable='true']"
+        ]
+
+        textarea = None
+        for selector in textarea_selectors:
+            try:
+                textarea = await page.wait_for_selector(selector, timeout=10000)
+                if textarea:
+                    logger.info(f"Found reply textarea with selector: {selector}")
+                    break
+            except Exception:
+                continue
+
+        if not textarea:
+            logger.error("Reply textarea not found")
+            await take_error_screenshot(page, "textarea_missing.png")
+            return False
+
+        await textarea.fill(reply_text)
+        await asyncio.sleep(2)
+
+        # Click the reply button
+        post_button_selectors = [
+            "[data-testid='tweetButton']",
+            "div[role='button']:has-text('Reply')",
+            "div[role='button']:has-text('Post')"
+        ]
+
+        if not await wait_for_and_click(page, post_button_selectors, timeout=10000):
+            logger.error("Post reply button not found")
+            await take_error_screenshot(page, "post_reply_error.png")
+            return False
+
+        logger.info("Reply posted successfully")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error replying to tweet: {e}")
+        await take_error_screenshot(page, "reply_error.png")
+        return False
