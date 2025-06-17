@@ -5,4 +5,5 @@ pytest==7.4.0
 pytest-playwright==0.4.0
 requests==2.31.0
 schedule==1.2.1
+psutil==5.9.5
 # asyncio is part of Python standard library, no need to install it

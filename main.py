@@ -260,22 +260,20 @@ async def check_tweets_and_reply():
                 for tweet in new_tweets:
                     # Generate reply for the tweet using Gemini (OpenAI değil)
                     reply_text = generate_web3_reply(tweet['text'])  # _with_gemini kaldırıldı
-                    logger.info(f"Generated reply for {account}: {reply_text}")
-                    
-                    # Send the reply
-                    if 'url' in tweet:
-                        success = reply_to_tweet(page, tweet['url'], reply_text)
-                        if success:
-                            logger.info(f"Reply successfully sent to {account}: {tweet['url']}")
-                            # Mark this tweet as replied
-                            replied_tweets[tweet['url']] = time.time()
-                        else:
-                            logger.error(f"Reply failed for {account}: {tweet['url']}")
+                    logger.info(f"Generated reply for {account}: {reply_text}")                        # Send the reply
+                        if 'url' in tweet:
+                            success = await reply_to_tweet(page, tweet['url'], reply_text)
+                            if success:
+                                logger.info(f"Reply successfully sent to {account}: {tweet['url']}")
+                                # Mark this tweet as replied
+                                replied_tweets[tweet['url']] = time.time()
+                            else:
+                                logger.error(f"Reply failed for {account}: {tweet['url']}")
                         
-                        # Avoid detection by adding delay
-                        human_like_delay(15000, 30000)  # Longer delay between replies
-                    else:
-                        logger.error(f"No URL found for {account}'s tweet, can't reply")
+                            # Avoid detection by adding delay
+                            await human_like_delay(15000, 30000)  # Longer delay between replies
+                        else:
+                            logger.error(f"No URL found for {account}'s tweet, can't reply")
             else:
                 logger.info(f"No new tweets found for {account} in the last hour")
             
@@ -312,11 +310,11 @@ async def post_web3_content(page, project, content):
         logger.error(f"Error posting content for {project}: {e}")
         return False
 
-def debug_thread():
+async def debug_thread():
     """Debug function to test thread creation"""
     try:
         # Initialize browser
-        browser, page = initialize_browser()
+        browser, page = await initialize_browser()
         
         # Create test content
         test_tweets = [
@@ -326,7 +324,7 @@ def debug_thread():
         ]
         
         # Try to create a thread
-        success = post_tweet_thread_v2(page, test_tweets)
+        success = await post_tweet_thread_v2(page, test_tweets)
         
         if success:
             logger.info("Thread test appears successful!")
@@ -338,7 +336,7 @@ def debug_thread():
         traceback.print_exc()
     finally:
         # Clean up when script exits
-        cleanup_browser()
+        await cleanup_browser(browser)
 
 def split_content_intelligently(content, max_length=280):
     """Split content into tweets at appropriate sentence boundaries without any numbering"""
@@ -555,7 +553,7 @@ def generate_web3_reply(original_tweet_text):
         logger.error(f"Error generating reply: {e}")
         return ""
 
-def perform_browser_health_check():
+async def perform_browser_health_check():
     """Check browser health and restart if necessary"""
     global browser, page
     
@@ -565,28 +563,28 @@ def perform_browser_health_check():
         # Check if browser is still responsive
         if browser is None or page is None:
             logger.warning("Browser or page is None, restarting...")
-            cleanup_browser()
-            browser, page = initialize_browser()
+            await cleanup_browser(browser)
+            browser, page = await initialize_browser()
             return
         
         # Try to navigate to a simple page
         try:
-            page.goto("https://twitter.com/home", timeout=30000)
+            await page.goto("https://twitter.com/home", timeout=30000)
             current_url = page.url
             logger.info(f"Browser check: Current URL is {current_url}")
             
             # Check if we're still logged in
             if "login" in current_url.lower():
                 logger.warning("No longer logged in, re-initializing...")
-                cleanup_browser()
-                browser, page = initialize_browser()
+                await cleanup_browser(browser)
+                browser, page = await initialize_browser()
                 return
                 
         except Exception as e:
             logger.error(f"Browser navigation error: {e}")
             logger.warning("Restarting browser due to navigation issues...")
-            cleanup_browser()
-            browser, page = initialize_browser()
+            await cleanup_browser(browser)
+            browser, page = await initialize_browser()
             return
             
         logger.info("Browser health check completed: Browser is healthy")
@@ -595,8 +593,8 @@ def perform_browser_health_check():
         logger.error(f"Browser health check error: {e}")
         # Try to recover
         try:
-            cleanup_browser()
-            browser, page = initialize_browser()
+            await cleanup_browser(browser)
+            browser, page = await initialize_browser()
             logger.info("Browser reinitialized after health check failure")
         except Exception as recover_e:
             logger.error(f"Recovery after health check failed: {recover_e}")
@@ -629,13 +627,12 @@ async def monitor_and_reply_to_tweets(page, accounts):
                     tweet_time = datetime.strptime(tweet['timestamp'], "%Y-%m-%dT%H:%M:%S")
                     if tweet_time >= one_hour_ago:
                         logger.info(f"Found recent tweet from {account}: {tweet['text'][:50]}...")
-                        
-                        # Generate reply
+                                  # Generate reply
                         reply_text = generate_reply(tweet['text'])
                         logger.info(f"Generated reply: {reply_text[:50]}...")
                         
                         # Post reply
-                        success = reply_to_tweet(page, tweet['url'], reply_text)
+                        success = await reply_to_tweet(page, tweet['url'], reply_text)
                         if success:
                             logger.info(f"Successfully replied to tweet from {account}")
                         else:
@@ -647,14 +644,14 @@ async def monitor_and_reply_to_tweets(page, accounts):
     except Exception as e:
         logger.error(f"Error in monitor_and_reply_to_tweets: {e}")
 
-def post_content_for_projects(page, projects):
+async def post_content_for_projects(page, projects):
     """Post content for two random projects and track success."""
     try:
         selected_projects = random.sample(projects, 2)
         for project in selected_projects:
             logger.info(f"Posting content for project: {project['name']}")
             content = generate_web3_content(project)
-            success = post_web3_content(page, project, content)
+            success = await post_web3_content(page, project, content)
             if success:
                 logger.info(f"Successfully posted content for project: {project['name']}")
             else:
@@ -664,23 +661,23 @@ def post_content_for_projects(page, projects):
     except Exception as e:
         logger.error(f"Error posting content for projects: {e}")
 
-def main():
+async def main():
     browser = None
     try:
         logger.info("Browser initialization attempt 1 of 3")
         logger.info("Initializing browser...")
         
-        browser, page = login(headless=True)
+        browser, page = await login(headless=True)
         
         if browser and page:
             logger.info("Browser initialized and logged in to Twitter")
-            time.sleep(2)  # Wait for session to stabilize
+            await asyncio.sleep(2)  # Wait for session to stabilize
             
             # Generate and post content
             project, content = generate_content()
             logger.info(f"Selected project: {project}")
             
-            success = post_tweet_thread_v2(page, content)
+            success = await post_tweet_thread_v2(page, content)
             if success:
                 logger.info(f"Successfully posted about {project}")
             else:
@@ -689,15 +686,18 @@ def main():
         logger.error(f"Main execution error: {e}")
     finally:
         if browser:
-            cleanup_browser(browser)
+            await cleanup_browser(browser)
             logger.info("Browser cleanup completed")
 
 # For testing different functions individually
+async # For testing different functions individually
 async def test_mode():
+    global browser, page
     test_feature = "combined"  # "browse", "check", "post", or "combined"
     try:
         # Initialize browser
-        await initialize_browser()
+        browser, page = await initialize_browser()
+        
         if test_feature == "browse":
             logger.info("Starting tweet browsing test...")
             account = "elonmusk"
@@ -715,11 +715,11 @@ async def test_mode():
             await check_tweets_and_reply()
         elif test_feature == "post":
             logger.info("Starting content posting test...")
-            post_web3_content(page, PROJECTS[0], generate_web3_content(PROJECTS[0]))
+            await post_web3_content(page, PROJECTS[0], generate_web3_content(PROJECTS[0]))
         elif test_feature == "combined":
             logger.info("Starting combined test...")
-            post_web3_content(page, PROJECTS[0], generate_web3_content(PROJECTS[0]))
-            human_like_delay(10000, 20000)
+            await post_web3_content(page, PROJECTS[0], generate_web3_content(PROJECTS[0]))
+            await human_like_delay(10000, 20000)
             await check_tweets_and_reply()
         else:
             logger.warning(f"Invalid test type: {test_feature}")
@@ -729,7 +729,7 @@ async def test_mode():
         traceback.print_exc()
     finally:
         # Optionally close browser after testing
-        cleanup_browser(browser)
+        await cleanup_browser(browser)
 
 # Ana kod bloğu - DOSYANIN EN SONUNA
 async def run_bot():

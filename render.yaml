@@ -16,6 +16,16 @@ services:
         sync: false
       - key: TWITTER_PASSWORD
         sync: false
+      - key: RENDER
+        value: true
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: /app/ms-playwright
     autoDeploy: true
     healthCheckPath: /
     port: 10000
+    healthCheckTimeout: 300  # 5 minutes
+    numInstances: 1
+    disk:
+      name: data
+      mountPath: /app/browser_data
+      sizeGB: 1

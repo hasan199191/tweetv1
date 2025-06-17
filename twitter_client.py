@@ -3,9 +3,10 @@ import random
 import time
 import json
 import pathlib
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 import re  # Import re for regular expression operations
 from email_reader import EmailReader
+import asyncio  # Add asyncio import explicitly
 import logging
 import traceback
 import asyncio
@@ -111,38 +112,71 @@ async def login(headless=False):
     """
     Login to Twitter with optional headless mode using Async API
     """
+    playwright = None
+    browser = None
+    page = None
     try:
-        p = await async_playwright().start()
-        if not p:
-            raise Exception("Failed to start Playwright")
+        # Initialize Playwright properly with retry logic
+        for attempt in range(3):
+            try:
+                logger.info(f"Initializing Playwright (attempt {attempt + 1}/3)")
+                playwright = await async_playwright().start()
+                if playwright:
+                    break
+                else:
+                    logger.error("Playwright initialization returned None")
+                    await asyncio.sleep(2)
+            except Exception as init_error:
+                logger.error(f"Playwright initialization error (attempt {attempt + 1}): {init_error}")
+                await asyncio.sleep(2)
+                continue
+
+        if not playwright:
+            raise Exception("Failed to initialize Playwright after 3 attempts")
 
         # Ensure browser data directory exists and is writable
         browser_data_dir = os.path.abspath("./browser_data")
-        os.makedirs(browser_data_dir, exist_ok=True)
+        os.makedirs(browser_data_dir, exist_ok=True)        # Launch browser with custom arguments for better stability
+        for attempt in range(3):
+            try:
+                logger.info(f"Launching browser (attempt {attempt + 1}/3)")
+                browser = await playwright.chromium.launch_persistent_context(
+                    browser_data_dir,
+                    headless=headless,
+                    viewport={'width': 1280, 'height': 720},
+                    args=[
+                        '--no-sandbox',
+                        '--disable-setuid-sandbox',
+                        '--disable-dev-shm-usage',
+                        '--disable-accelerated-2d-canvas',
+                        '--disable-gpu',
+                        '--disable-notifications',
+                        '--disable-background-timer-throttling',
+                        '--disable-backgrounding-occluded-windows',
+                        '--disable-breakpad',
+                        '--disable-component-extensions-with-background-pages',
+                        '--disable-features=TranslateUI,BlinkGenPropertyTrees',
+                        '--disable-ipc-flooding-protection',
+                        '--disable-renderer-backgrounding',
+                        '--enable-automation',
+                        '--password-store=basic',
+                        '--no-first-run',
+                        '--no-default-browser-check'
+                    ],
+                    chromium_sandbox=False
+                )
+                if browser:
+                    break
+                else:
+                    logger.error("Browser launch returned None")
+                    await asyncio.sleep(2)
+            except Exception as browser_error:
+                logger.error(f"Browser launch error (attempt {attempt + 1}): {browser_error}")
+                await asyncio.sleep(2)
+                continue
 
-        # Launch browser with custom arguments for better stability
-        browser = await p.chromium.launch_persistent_context(
-            browser_data_dir,
-            headless=headless,
-            viewport={'width': 1280, 'height': 720},
-            args=[
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--disable-gpu',
-                '--disable-notifications',
-                '--disable-background-timer-throttling',
-                '--disable-backgrounding-occluded-windows',
-                '--disable-breakpad',
-                '--disable-component-extensions-with-background-pages',
-                '--disable-features=TranslateUI,BlinkGenPropertyTrees',
-                '--disable-ipc-flooding-protection',
-                '--disable-renderer-backgrounding',
-                '--enable-automation',
-                '--password-store=basic'
-            ]
-        )
+        if not browser:
+            raise Exception("Failed to launch browser after 3 attempts")
 
         if not browser:
             raise Exception("Failed to launch browser")
@@ -256,10 +290,34 @@ async def cleanup_browser(browser):
     """Clean up browser instance and playwright"""
     try:
         if browser:
-            await browser.close()
-            logger.info("Browser instance closed")
+            try:
+                await browser.close()
+                logger.info("Browser instance closed")
+            except Exception as browser_error:
+                logger.error(f"Browser close error: {browser_error}")
+
+        # Try to clean up any lingering browser processes
+        try:
+            import psutil
+            for proc in psutil.process_iter():
+                try:
+                    if "chrome" in proc.name().lower() or "chromium" in proc.name().lower():
+                        proc.kill()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+        except Exception as proc_error:
+            logger.error(f"Process cleanup error: {proc_error}")
+            
     except Exception as e:
         logger.error(f"Browser cleanup error: {e}")
+    finally:
+        # Make sure browser data directory exists and is writable for next time
+        try:
+            browser_data_dir = os.path.abspath("./browser_data")
+            os.makedirs(browser_data_dir, exist_ok=True)
+            os.chmod(browser_data_dir, 0o777)
+        except Exception as dir_error:
+            logger.error(f"Directory cleanup error: {dir_error}")
 
 async def wait_for_and_click(page, selectors, timeout=5000):
     """Try multiple selectors to find and click a button"""
