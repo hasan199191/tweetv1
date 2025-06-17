@@ -196,13 +196,13 @@ def cleanup_browser(browser):
         browser = None
         page = None
 
-def check_tweets_and_reply():
+async def check_tweets_and_reply():
     """Check tweets from all specified accounts and reply to recent ones"""
     try:
         logger.info("Starting tweet monitoring and reply task...")
         
         # Initialize browser or use existing session
-        browser, page = initialize_browser()
+        browser, page = await initialize_browser()
         
         # Track which tweets we've already replied to
         replied_tweets_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "replied_tweets.json")
@@ -717,7 +717,7 @@ async def test_mode():
             
         elif test_feature == "check":
             logger.info("Starting tweet monitoring and reply test...")
-            check_tweets_and_reply()
+            await check_tweets_and_reply()
         elif test_feature == "post":
             logger.info("Starting content posting test...")
             post_web3_content(page, PROJECTS[0], generate_web3_content(PROJECTS[0]))
@@ -725,7 +725,7 @@ async def test_mode():
             logger.info("Starting combined test...")
             post_web3_content(page, PROJECTS[0], generate_web3_content(PROJECTS[0]))
             human_like_delay(10000, 20000)
-            check_tweets_and_reply()
+            await check_tweets_and_reply()
         else:
             logger.warning(f"Invalid test type: {test_feature}")
             
