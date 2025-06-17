@@ -1,8 +1,8 @@
 playwright==1.40.0
 python-dotenv==1.0.0
-google-generativeai==0.3.2
+google-generativeai>=0.2.0
 pytest==7.4.0
 pytest-playwright==0.4.0
 requests==2.31.0
 schedule==1.2.1
-asyncio==3.4.3
+# asyncio is part of Python standard library, no need to install it
