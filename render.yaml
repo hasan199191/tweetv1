@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: twitter-bot
+    env: docker
+    buildCommand: null  # Dockerfile ile yapılacak
+    startCommand: null  # Dockerfile ile yapılacak
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TWITTER_USER
+        sync: false
+      - key: TWITTER_PASS
+        sync: false
+      - key: TWITTER_EMAIL
+        sync: false
+      - key: EMAIL_PASS
+        sync: false
+    autoDeploy: true
