@@ -3,11 +3,12 @@ import random
 import time
 import json
 import pathlib
-from playwright.sync_api import sync_playwright
+from playwright.async_api import async_playwright
 import re  # Import re for regular expression operations
 from email_reader import EmailReader
 import logging
 import traceback
+import asyncio
 
 # Create directory to store browser session data
 USER_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "browser_profile")
@@ -15,10 +16,10 @@ os.makedirs(USER_DATA_DIR, exist_ok=True)
 
 logger = logging.getLogger(__name__)
 
-def human_like_delay(min_ms=500, max_ms=1500):
-    """Wait for a random amount of time like a human would"""
-    delay = random.uniform(min_ms, max_ms) / 1000.0
-    time.sleep(delay)
+async def human_like_delay(min_ms=500, max_ms=1500):
+    """Simulate human-like delay between actions"""
+    delay = random.randint(min_ms, max_ms) / 1000.0
+    await asyncio.sleep(delay)
 
 def type_like_human(page, selector, text):
     """Type text with human-like delays and patterns"""
@@ -115,73 +116,72 @@ def cleanup_browser(browser):
     except Exception as e:
         logger.error(f"Browser cleanup error: {e}")
 
-def login(headless=False):
+async def login(headless=False):
     """
-    Login to Twitter with optional headless mode
+    Login to Twitter with optional headless mode using Async API
     """
     try:
-        p = sync_playwright().start()
-        browser = p.chromium.launch_persistent_context(
+        p = await async_playwright().start()
+        browser = await p.chromium.launch_persistent_context(
             "./browser_data",
-            headless=headless,  # Now accepts headless parameter
+            headless=headless,  # Set headless mode dynamically
             viewport={'width': 1280, 'height': 720}
         )
-        
+
         # Open a new page
-        page = browser.new_page()
+        page = await browser.new_page()
         page.set_default_timeout(30000)  # Increase timeout to 30 seconds
-        
+
         logger.info("Checking login status...")
-        page.goto("https://twitter.com/home")
-        time.sleep(3)
-        
+        await page.goto("https://twitter.com/home")
+        await asyncio.sleep(3)
+
         if "home" in page.url and not "login" in page.url:
             logger.info("Already logged in!")
             return browser, page
-        
+
         # Login process
         try:
             logger.info("Navigating to login page...")
-            page.goto("https://twitter.com/i/flow/login", timeout=30000)
-            human_like_delay(2000, 3000)
-            
+            await page.goto("https://twitter.com/i/flow/login", timeout=30000)
+            await asyncio.sleep(2)
+
             # First step - enter username instead of email
             logger.info("Entering username...")
-            page.wait_for_selector("input[name='text']", state="visible", timeout=15000)
-            human_like_delay()
-            
+            await page.wait_for_selector("input[name='text']", state="visible", timeout=15000)
+
             # Use username from env
             username = os.getenv("TWITTER_USER", "chefcryptoz")
             logger.info(f"Entering username: {username}")
-            type_like_human(page, "input[name='text']", username)
-            human_like_delay(1000, 2000)
-            
+            await page.fill("input[name='text']", username)
+            await asyncio.sleep(1)
+
             # Click Next button
             logger.info("Looking for Next button...")
             next_button_selectors = [
                 "div[role='button']:has-text('Next')",
                 "div[data-testid='LoginForm_Forward_Button']"
             ]
-            
+
             next_button_found = False
             for selector in next_button_selectors:
                 try:
-                    button = page.query_selector(selector)
+                    button = await page.query_selector(selector)
                     if button:
                         logger.info(f"Next button found: {selector}")
-                        button.click()
+                        await button.click()
                         next_button_found = True
                         break
                 except Exception as e:
                     logger.warning(f"This selector couldn't be clicked {selector}: {e}")
-            
+
             if not next_button_found:
                 # Alternative - press enter
                 logger.info("Next button not found, trying enter key...")
-                page.press("input[name='text']", "Enter")
-            
-            human_like_delay(3000, 5000)
-            
+                await page.press("input[name='text']", "Enter")
+
+            await asyncio.sleep(3)
+
             # Check for verification code prompt
             verify_selectors = [
                 "input[data-testid='ocfEnterTextTextInput']",
@@ -210,7 +210,7 @@ def login(headless=False):
                             except:
                                 continue
                         
-                        human_like_delay(3000, 5000)
+                        await asyncio.sleep(3)
                         break
                 except:
                     continue
@@ -218,7 +218,7 @@ def login(headless=False):
             # Password entry
             logger.info("Entering password...")
             try:
-                page.wait_for_selector("input[name='password']", state="visible", timeout=15000)
+                await page.wait_for_selector("input[name='password']", state="visible", timeout=15000)
                 human_like_delay()
                 password = os.getenv("TWITTER_PASS", "Nuray1965+")
                 type_like_human(page, "input[name='password']", password)
@@ -271,8 +271,8 @@ def login(headless=False):
         
         return browser, page
     except Exception as e:
-        logger.error(f"Login error: {e}")
-        return None, None
+        logger.error(f"Error during login: {e}")
+        raise e
 
 def get_verification_code():
     """Access email to get verification code"""
@@ -484,7 +484,7 @@ def post_tweet_thread_v2(page, tweets_content):
                 }""")
                 
                 if text_area_found:
-                    print("Found and focused textarea using JavaScript")
+                    console.log("Found and focused textarea using JavaScript")
                     # Şimdi içeriği gir
                     page.keyboard.type(first_tweet)
                     human_like_delay(1000, 2000)
@@ -544,7 +544,7 @@ def post_tweet_thread_v2(page, tweets_content):
             # Approach 2: Try JavaScript to find and click the button
             if not add_button_clicked:
                 try:
-                    print("Trying JavaScript method to find Add button...")
+                    console.log("Trying JavaScript method to find Add button...")
                     add_button_clicked = page.evaluate("""() => {
                         // Try to find by role and label
                         const buttons = document.querySelectorAll('[role="button"]');
@@ -590,10 +590,10 @@ def post_tweet_thread_v2(page, tweets_content):
                     }""")
                     
                     if add_button_clicked:
-                        print("Add button clicked with JavaScript method")
+                        console.log("Add button clicked with JavaScript method")
                         human_like_delay(1000, 2000)
                     else:
-                        print("Could not find Add button with JavaScript")
+                        console.log("Could not find Add button with JavaScript")
                 except Exception as e:
                     print(f"JavaScript error: {e}")
             
@@ -845,282 +845,226 @@ def post_as_numbered_tweets(page, tweets_content):
     
     return success
 
-def reply_to_tweet(page, tweet_url, reply_text):
+async def reply_to_tweet(page, tweet_url, reply_text):
     """Reply to a specific tweet using human-like typing"""
+    if not reply_text:
+        print("No reply text provided, skipping...")
+        return False
+
     print(f"Navigating to tweet URL: {tweet_url}")
-    page.goto(tweet_url)
-    human_like_delay(3000, 5000)
+    await page.goto(tweet_url)
+    await human_like_delay(3000, 5000)
     
-    # Look for reply button using more robust methods
     print("Looking for reply button...")
-    
-    # First try standard selectors
     reply_button_selectors = [
-        "div[data-testid='reply']", 
-        "div[aria-label='Reply']",
-        "div[role='button'][data-testid='reply']",
         "button[data-testid='reply']",
-        "button[aria-label*='Reply']",
-        "button[aria-label*='Yanıt']"
+        "div[data-testid='reply']",
+        "div[aria-label='Reply']"
     ]
     
     reply_button_clicked = False
     for selector in reply_button_selectors:
         try:
-            reply_button = page.query_selector(selector)
+            # Wait for the button to be visible
+            reply_button = await page.wait_for_selector(selector, timeout=5000)
             if reply_button:
-                reply_button.click()
+                await reply_button.click()
                 reply_button_clicked = True
                 print(f"Reply button clicked with selector: {selector}")
                 break
         except Exception as e:
             print(f"Reply button not found with selector {selector}: {e}")
     
-    # If standard selectors fail, try advanced JavaScript
     if not reply_button_clicked:
-        print("Trying advanced JavaScript selectors for reply button...")
-        try:
-            # Use JavaScript to find the reply button by its characteristics
-            reply_button_clicked = page.evaluate("""() => {
-                // Try to find by standard attributes first
-                let replyButton = document.querySelector("[data-testid='reply']");
-                if (replyButton) {
-                    replyButton.click();
-                    return true;
-                }
-                
-                // Try to find by SVG path (the reply icon)
-                const buttons = document.querySelectorAll("button");
-                for (const button of buttons) {
-                    // Look for SVG with reply icon path pattern
-                    const svg = button.querySelector("svg");
-                    if (svg) {
-                        const path = svg.querySelector("path");
-                        if (path && path.getAttribute("d") && path.getAttribute("d").includes("M1.751 10")) {
-                            button.click();
-                            return true;
-                        }
-                    }
-                    
-                    // Check if button text includes "Reply" or "Yanıt"
-                    if (button.textContent && (button.textContent.includes("Reply") || button.textContent.includes("Yanıt"))) {
-                        button.click();
-                        return true;
-                    }
-                }
-                
-                // Try all elements with role="button" that might be the reply button
-                const roleButtons = document.querySelectorAll("[role='button']");
-                for (const btn of roleButtons) {
-                    const svg = btn.querySelector("svg");
-                    if (svg) {
-                        const path = svg.querySelector("path");
-                        if (path && path.getAttribute("d") && path.getAttribute("d").includes("M1.751 10")) {
-                            btn.click();
-                            return true;
-                        }
-                    }
-                }
-                
-                return false;
-            }""")
-            
-            if reply_button_clicked:
-                print("Reply button clicked with JavaScript method")
-            else:
-                print("Reply button not found with JavaScript method")
-        except Exception as e:
-            print(f"JavaScript reply button error: {e}")
-    
-    if not reply_button_clicked:
-        print("Reply button not found, taking screenshot for debugging")
-        try:
-            page.screenshot(path="reply_button_missing.png")
-        except Exception as e:
-            print(f"Screenshot error: {e}")
+        print("Reply button not found, taking screenshot...")
+        await page.screenshot(path="reply_button_missing.png")
         return False
     
-    # Wait for reply textbox
-    human_like_delay(2000, 3000)
+    await human_like_delay(2000, 3000)
     
-    # Type reply
-    textarea_selectors = [
+    # Look for reply input field with wait
+    reply_input_selectors = [
         "div[data-testid='tweetTextarea_0']",
-        "div[role='textbox'][contenteditable='true']",
-        "div[aria-label='Post text']",
-        "div[aria-label='Tweet text']"
+        "div[data-testid='tweetTextarea_0_label']",
+        "div[role='textbox']"
     ]
     
-    text_area_found = False
-    for selector in textarea_selectors:
+    reply_input = None
+    for selector in reply_input_selectors:
         try:
-            text_area = page.query_selector(selector)
-            if text_area:
-                # Clear first
-                text_area.click()
-                page.keyboard.press("Control+A")
-                page.keyboard.press("Delete")
-                
-                # Then type
-                page.keyboard.type(reply_text)
-                text_area_found = True
-                print(f"Reply text entered using selector: {selector}")
+            reply_input = await page.wait_for_selector(selector, timeout=5000)
+            if reply_input:
+                print(f"Found reply input with selector: {selector}")
                 break
         except Exception as e:
-            print(f"Reply text area error with selector {selector}: {e}")
+            print(f"Reply input not found with selector {selector}: {e}")
     
-    # If standard selectors fail, try JavaScript
-    if not text_area_found:
-        try:
-            text_area_found = page.evaluate("""(replyText) => {
-                // Find any editable div that accepts text
-                const textareas = document.querySelectorAll('div[role="textbox"][contenteditable="true"]');
-                if (textareas.length > 0) {
-                    const textarea = textareas[0];
-                    textarea.focus();
-                    textarea.innerHTML = replyText;
-                    return true;
-                }
-                return false;
-            }""", reply_text)
-            
-            if text_area_found:
-                print("Reply text entered using JavaScript method")
-        except Exception as e:
-            print(f"JavaScript text area error: {e}")
-    
-    if not text_area_found:
-        print("Could not find reply text area")
+    if not reply_input:
+        print("Reply input field not found, taking screenshot...")
+        await page.screenshot(path="reply_input_missing.png")
         return False
     
-    # Send reply - try multiple methods
+    # Type the reply with human-like delay
+    await reply_input.click()
+    await human_like_delay(500, 1000)
+    await page.keyboard.type(reply_text, delay=100)
+    await human_like_delay(1000, 2000)
+    
+    # Click reply button
     reply_submit_selectors = [
         "div[data-testid='tweetButton']",
-        "div[role='button'][data-testid='tweetButton']",
-        "div[role='button']:has-text('Reply')",
-        "div[role='button']:has-text('Yanıtla')"
+        "div[data-testid='tweetButtonInline']"
     ]
     
     reply_submitted = False
     for selector in reply_submit_selectors:
         try:
-            submit_button = page.query_selector(selector)
+            submit_button = await page.wait_for_selector(selector, timeout=5000)
             if submit_button:
-                submit_button.click()
+                await submit_button.click()
                 reply_submitted = True
                 print(f"Reply submitted with selector: {selector}")
                 break
         except Exception as e:
-            print(f"Reply submit error with selector {selector}: {e}")
-    
-    # Try JavaScript if standard selectors fail
-    if not reply_submitted:
-        try:
-            reply_submitted = page.evaluate("""() => {
-                // Try standard tweet/reply button
-                let replyButton = document.querySelector("[data-testid='tweetButton']");
-                if (replyButton) {
-                    replyButton.click();
-                    return true;
-                }
-                
-                // Try any button that looks like a submit button
-                const buttons = document.querySelectorAll("[role='button']");
-                for (const button of buttons) {
-                    if (button.textContent && (
-                        button.textContent.includes("Reply") || 
-                        button.textContent.includes("Yanıtla") ||
-                        button.textContent.includes("Tweet") ||
-                        button.textContent.includes("Post"))) {
-                        button.click();
-                        return true;
-                    }
-                }
-                
-                return false;
-            }""")
-            
-            if reply_submitted:
-                print("Reply submitted with JavaScript method")
-        except Exception as e:
-            print(f"JavaScript submit error: {e}")
+            print(f"Submit button not found with selector {selector}: {e}")
     
     if not reply_submitted:
-        print("Reply submit button not found, trying keyboard shortcut...")
+        print("Trying keyboard shortcut...")
         try:
-            page.keyboard.press("Control+Enter")
+            await page.keyboard.press("Control+Enter")
             reply_submitted = True
             print("Reply submitted with keyboard shortcut")
         except Exception as e:
             print(f"Reply keyboard shortcut error: {e}")
+            await page.screenshot(path="reply_submit_failed.png")
             return False
     
-    # Wait for confirmation
-    human_like_delay(3000, 5000)
+    # Wait for reply to be posted
+    await human_like_delay(3000, 5000)
+    # Verify the reply was posted
+    try:
+        success_indicator = await page.wait_for_selector("div[data-testid='toast']", timeout=5000)
+        if success_indicator:
+            print("Reply posted successfully (toast notification found)")
+    except Exception as e:
+        print(f"Could not verify if reply was posted: {e}")
+    
     return reply_submitted
 
-def browse_tweets_v2(page, account, limit=5):
-    """Browse a user's tweets and return their content"""
+async def browse_tweets_v2(page, account, limit=1):
+    """Browse a user's profile and return their latest tweet."""
     print(f"Checking tweets from {account} account...")
-    
-    # Go to user's profile
-    page.goto(f"https://twitter.com/{account}")
-    
-    # Wait for tweets to load
-    human_like_delay(3000, 5000)
-    
-    # Extract tweet data using JavaScript
-    tweets = page.evaluate("""() => {
-        const tweets = [];
-        const articles = document.querySelectorAll('article[data-testid="tweet"]');
-        console.log(`Found ${articles.length} tweet elements`);
-        
-        let count = 0;
-        for (const article of articles) {
-            if (count >= 10) break;  // Limit to prevent excessive processing
-            
-            try {
-                // Extract tweet text
-                const textElement = article.querySelector('div[data-testid="tweetText"]');
-                if (!textElement) continue;
-                
-                const tweetText = textElement.textContent;
-                console.log(`Tweet found: ${tweetText.substring(0, 50)}...`);
-                
-                // Extract tweet URL
-                const timeElement = article.querySelector('time');
-                let tweetUrl = null;
-                let timestamp = null;
-                
-                if (timeElement) {
-                    const linkElement = timeElement.closest('a');
-                    if (linkElement) {
-                        tweetUrl = linkElement.href;
-                        // Also grab the datetime attribute for timestamp
-                        if (timeElement.hasAttribute('datetime')) {
+
+    try:
+        # Go to user's profile and wait for content to load
+        await page.goto(f"https://twitter.com/{account}")
+        await human_like_delay(5000, 7000)  # Increase initial wait time
+
+        # Wait for tweets to load
+        print("Waiting for tweets to load...")
+        try:
+            # Wait for article elements to appear
+            await page.wait_for_selector('article[data-testid="tweet"]', timeout=10000)
+        except Exception as wait_error:
+            print(f"Timeout waiting for tweets: {wait_error}")
+
+        # Scroll down slightly to ensure tweets are loaded
+        await page.evaluate("window.scrollBy(0, 500)")
+        await human_like_delay(2000, 3000)
+
+        # Extract tweet data using updated selectors
+        tweets = await page.evaluate("""() => {
+            const tweets = [];
+            const articles = document.querySelectorAll('article[data-testid="tweet"]');
+            console.log(`Found ${articles.length} tweet elements`);
+
+            for (const article of articles) {
+                try {
+                    // Try multiple selectors for tweet text
+                    let tweetText = '';
+                    const textSelectors = [
+                        'div[data-testid="tweetText"]',
+                        'div[lang]',
+                        'div[dir="auto"]'
+                    ];
+
+                    for (const selector of textSelectors) {
+                        const textElement = article.querySelector(selector);
+                        if (textElement) {
+                            tweetText = textElement.textContent;
+                            break;
+                        }
+                    }
+
+                    if (!tweetText) {
+                        console.log('No tweet text found, skipping...');
+                        continue;
+                    }
+
+                    console.log(`Tweet text found: ${tweetText.substring(0, 50)}...`);
+
+                    // Extract tweet URL from time element
+                    let tweetUrl = null;
+                    let timestamp = null;
+                    const timeElement = article.querySelector('time');
+
+                    if (timeElement) {
+                        const linkElement = timeElement.closest('a');
+                        if (linkElement) {
+                            tweetUrl = linkElement.href;
                             timestamp = timeElement.getAttribute('datetime');
                         }
                     }
+
+                    // If no time element found, try to get URL from article
+                    if (!tweetUrl) {
+                        const articleLink = article.querySelector('a[href*="/status/"]');
+                        if (articleLink) {
+                            tweetUrl = articleLink.href;
+                        }
+                    }
+
+                    if (!tweetUrl) {
+                        console.log('No tweet URL found, skipping...');
+                        continue;
+                    }
+
+                    tweets.push({
+                        text: tweetText,
+                        url: tweetUrl,
+                        timestamp: timestamp || new Date().toISOString()
+                    });
+
+                    // Log success
+                    console.log(`Successfully extracted tweet: ${tweetUrl}`);
+
+                } catch (error) {
+                    console.log(`Error processing tweet: ${error}`);
+                    continue;
                 }
-                
-                tweets.push({
-                    text: tweetText,
-                    url: tweetUrl,
-                    timestamp: timestamp
-                });
-                
-                count++;
-            } catch (e) {
-                console.log(`Error extracting tweet: ${e}`);
             }
-        }
-        
-        console.log(`Found ${tweets.length} tweets`);
-        return tweets;
-    }""")
-    
-    print(f"Found {len(tweets)} tweets")
-    return tweets
+
+            return tweets;
+        }""")
+
+        if not tweets:
+            print(f"No tweets found for {account} after extraction")
+            # Get page content for debugging
+            content = await page.content()
+            print(f"Page content sample: {content[:200]}...")
+            return []
+
+        print(f"Found {len(tweets)} tweets for {account}")
+        return tweets[:limit]
+
+    except Exception as e:
+        print(f"Error browsing tweets for {account}: {e}")
+        # Take screenshot for debugging
+        try:
+            await page.screenshot(path=f"debug_{account}_error.png")
+        except Exception as screenshot_error:
+            print(f"Failed to take debug screenshot: {screenshot_error}")
+        return []
 
 def post_manual_thread(page, tweets_content):
     """Post a thread manually by replying to your own tweets"""

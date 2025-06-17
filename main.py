@@ -14,6 +14,11 @@ from logging import getLogger
 import google.generativeai as genai
 from dotenv import load_dotenv
 from twitter_client import login, post_tweet_thread_v2, cleanup_browser
+from datetime import datetime, timedelta
+from twitter_client import browse_tweets_v2, human_like_delay, reply_to_tweet
+import importlib
+from replier import generate_reply
+import asyncio
 
 logger = getLogger(__name__)
 
@@ -84,7 +89,6 @@ KEYWORDS = [
     "Caldera", "Camp Network", "Corn", "Defi App", "dYdX", "Eclipse", 
     "Fogo", "Frax", "FUEL", "Huma", "Humanity Protocol", "Hyperbolic", 
     "Initia", "Injective", "Infinex", "IQ", "Irys", "Kaia", "Kaito", 
-    "Katana", "Kinto", "Lombard", "MANTRA", "Mantle", "MapleStory Universe", 
     "MegaETH", "Mitosis", "Monad", "Movement", "Multibank", "Multipli", 
     "Near", "Newton", "Novastro", "OpenLedger", "PARADEX", "PENGU", 
     "Polkadot", "Portal to BTC", "PuffPaw", "Pyth", "QUAI", "SatLayer", 
@@ -140,58 +144,49 @@ def reload_modules():
     except Exception as e:
         logger.error(f"Module reload error: {e}")
 
-def initialize_browser(max_attempts=3, wait_time=5):
-    """Initialize browser with retry logic"""
+async def initialize_browser(max_attempts=3, wait_time=5):
+    """Initialize browser with retry logic using Async API"""
     global browser, page
-    
+
     for attempt in range(1, max_attempts + 1):
         try:
             logger.info(f"Browser initialization attempt {attempt} of {max_attempts}")
             logger.info("Initializing browser...")
-            
-            # Burada login fonksiyonunu true ile çağırarak headless modu aktif et
-            browser, page = login(headless=True)
-            
+
+            # Call async login function with headless=False
+            browser, page = await login(headless=False)  # Set to False to see the browser
+
             if browser and page:
                 logger.info("Browser initialized and logged in to Twitter")
                 return browser, page
             else:
                 raise Exception("Browser or page is None")
-                
+
         except Exception as e:
             logger.error(f"Browser initialization error: {e}")
-            if hasattr(e, 'message') and 'browser has been closed' in str(e.message):
-                logger.error(f"Browser logs:\n{e.message}")
             try:
                 if browser:
-                    logger.error("Failed to restart browser: {e}")
-                    cleanup_browser(browser)
+                    logger.error(f"Failed to restart browser: {e}")
+                    await cleanup_browser(browser)
                     browser = None
                     page = None
             except Exception as cleanup_error:
                 logger.error(f"Error during browser cleanup: {cleanup_error}")
-                
+
             logger.error(f"Browser initialization failed on attempt {attempt}: {e}")
-            
+
             if attempt < max_attempts:
                 logger.info(f"Waiting {wait_time} seconds before retrying...")
-                time.sleep(wait_time)
-            else:
-                logger.error("Maximum browser initialization attempts reached. Exiting.")
-                return None, None
-    
-    return None, None
+                await asyncio.sleep(wait_time)
 
-def cleanup_browser():
+    raise Exception("Failed to initialize browser after maximum attempts")
+
+def cleanup_browser(browser):
     """Close browser cleanly"""
-    global browser, page
-    
     try:
         if browser is not None:
             logger.info("Closing browser...")
             browser.close()
-            browser = None
-            page = None
             logger.info("Browser closed")
     except Exception as e:
         logger.error(f"Browser closing error: {e}")
@@ -298,11 +293,10 @@ def check_tweets_and_reply():
         logger.error(f"Tweet check error: {e}")
         traceback.print_exc()
 
-def post_web3_content(project, content):
+def post_web3_content(page, project, content):
     """Post a tweet about a random Web3 project"""
     try:
-        browser, page = initialize_browser()
-        if not browser or not page:
+        if not page:
             logger.warning("Page is None, initializing browser...")
             browser, page = initialize_browser()
             
@@ -540,51 +534,28 @@ def generate_web3_reply(original_tweet_text):
         Make your reply technically accurate, insightful and valuable to the conversation.
         """
         
-        # Use a more advanced model if available
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "You are a senior blockchain developer and Web3 expert with years of hands-on experience building crypto projects. You provide technically accurate, insightful comments that demonstrate deep understanding. Never be generic, promotional, or obvious."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=300,
-            temperature=0.8,
-            presence_penalty=0.6,
-            frequency_penalty=0.6
-        )
+        # Use Gemini for reply generation
+        generation_config = {
+            "temperature": 0.8,
+            "top_p": 0.9,
+            "top_k": 32,
+            "max_output_tokens": 300,
+        }
+        
+        chat = genai.start_chat(history=[])
+        response = chat.send_message(prompt, generation_config=generation_config)
         
         # Extract and clean the content
-        content = response.choices[0].message["content"].strip()
-        content = re.sub(r'\(\d+\/\d+\)', '', content)
-        content = re.sub(r'\d+\/\d+', '', content)
+        content = response.text.strip()
+        content = re.sub(r'\(\d+/\d+\)', '', content)
+        content = re.sub(r'\d+/\d+', '', content)
         content = re.sub(r'This is a single tweet.*?characters\.', '', content, flags=re.IGNORECASE)
         content = re.sub(r'No need for a thread\.', '', content, flags=re.IGNORECASE)
         
-        # Ensure the reply is not too long
-        if len(content) > 280:
-            # Try to smartly truncate at a sentence boundary
-            sentences = re.split(r'(?<=[.!?])\s+', content)
-            truncated_content = ""
-            for sentence in sentences:
-                if len(truncated_content + sentence) <= 270:  # Leave room for ellipsis
-                    truncated_content += sentence + " "
-                else:
-                    break
-            content = truncated_content.strip() + "..."
-        
         return content
-    
     except Exception as e:
         logger.error(f"Error generating reply: {e}")
-        # More thoughtful fallback replies
-        fallback_replies = [
-            "The intersection of your point with zk-proofs and data availability layer tech is fascinating. Have you seen similar approaches in other L2s?",
-            "This aligns with recent governance experiments in DeFi. The balance between decentralization and execution speed remains challenging.",
-            "Your analysis overlooks the composability aspects. How do you see this working with cross-chain protocols?",
-            "MEV implications here are significant. Would be interesting to see how sandwich attack resistance develops in this model.",
-            "The tokenomics you're describing has parallels to recent research on sustainable validator incentives. Worth exploring further."
-        ]
-        return random.choice(fallback_replies)
+        return ""
 
 def perform_browser_health_check():
     """Check browser health and restart if necessary"""
@@ -642,6 +613,59 @@ def generate_content():
     content = f"Exciting updates from {selected_project}! Stay tuned for more developments. #web3 #crypto"
     return selected_project, content
 
+def monitor_and_reply_to_tweets(page, accounts):
+    """Monitor specified accounts and reply to their tweets from the last hour."""
+    try:
+        logger.info("Starting tweet monitoring and reply process...")
+        one_hour_ago = datetime.now() - timedelta(hours=1)
+        for account in accounts:
+            logger.info(f"Checking tweets from account: {account}")
+            tweets = browse_tweets_v2(page, account, limit=10)
+            
+            if not tweets:
+                logger.info(f"No tweets found for account: {account}")
+                continue
+            
+            for tweet in tweets:
+                try:
+                    tweet_time = datetime.strptime(tweet['timestamp'], "%Y-%m-%dT%H:%M:%S")
+                    if tweet_time >= one_hour_ago:
+                        logger.info(f"Found recent tweet from {account}: {tweet['text'][:50]}...")
+                        
+                        # Generate reply
+                        reply_text = generate_reply(tweet['text'])
+                        logger.info(f"Generated reply: {reply_text[:50]}...")
+                        
+                        # Post reply
+                        success = reply_to_tweet(page, tweet['url'], reply_text)
+                        if success:
+                            logger.info(f"Successfully replied to tweet from {account}")
+                        else:
+                            logger.error(f"Failed to reply to tweet from {account}")
+                    else:
+                        logger.info(f"Tweet from {account} is older than 1 hour.")
+                except Exception as tweet_error:
+                    logger.error(f"Error processing tweet from {account}: {tweet_error}")
+    except Exception as e:
+        logger.error(f"Error in monitor_and_reply_to_tweets: {e}")
+
+def post_content_for_projects(page, projects):
+    """Post content for two random projects and track success."""
+    try:
+        selected_projects = random.sample(projects, 2)
+        for project in selected_projects:
+            logger.info(f"Posting content for project: {project['name']}")
+            content = generate_web3_content(project)
+            success = post_web3_content(page, project, content)
+            if success:
+                logger.info(f"Successfully posted content for project: {project['name']}")
+            else:
+                logger.error(f"Failed to post content for project: {project['name']}")
+                projects.remove(project)
+                logger.info(f"Removed failing project: {project['name']} from the list")
+    except Exception as e:
+        logger.error(f"Error posting content for projects: {e}")
+
 def main():
     browser = None
     try:
@@ -698,11 +722,11 @@ def test_mode():
         elif test_feature == "post":
             # Test content posting
             logger.info("Starting content posting test...")
-            post_web3_content()
+            post_web3_content(page, PROJECTS[0], generate_web3_content(PROJECTS[0]))
         elif test_feature == "combined":
             # Test all functionality
             logger.info("Starting combined test...")
-            post_web3_content()
+            post_web3_content(page, PROJECTS[0], generate_web3_content(PROJECTS[0]))
             human_like_delay(10000, 20000)
             check_tweets_and_reply()
         else:
@@ -713,48 +737,91 @@ def test_mode():
         traceback.print_exc()
     finally:
         # Optionally close browser after testing
-        cleanup_browser()
+        cleanup_browser(browser)
 
 # Ana kod bloğu - DOSYANIN EN SONUNA
-if __name__ == "__main__":
+async def run_bot():
+    """Initialize and run the bot"""
     try:
-        # HTTP sunucusunu başlat (önce)
-        server_thread = threading.Thread(target=start_http_server, daemon=True)
-        server_thread.start()
-        logger.info("HTTP sunucu thread'i başlatıldı")
-        
-        # Tarayıcıyı başlat
-        browser, page = initialize_browser()
-        
-        # Görevleri planla (varolan kodlarınız)
-        schedule.every(2).hours.do(post_web3_content)
-        schedule.every(1).hours.do(check_tweets_and_reply)
-        
-        # İlk tweet paylaşımını hemen yap
-        post_web3_content()
-        
-        # Görev zamanlayıcı ana döngü
+        browser, page = await initialize_browser()
+        await main_loop()
+    except Exception as e:
+        logger.error(f"Bot execution error: {e}")
+        if 'browser' in locals():
+            await cleanup_browser(browser)
+
+async def main_loop():
+    """Main bot loop"""
+    try:
         while True:
             try:
-                schedule.run_pending()
-                time.sleep(60)
-            except Exception as e:
-                logger.error(f"Ana döngüde hata: {e}")
-                traceback.print_exc()
+                current_hour = datetime.now().hour
                 
-                # Tarayıcı hata verirse yeniden başlatmayı dene
-                try:
-                    cleanup_browser(browser)
-                    browser, page = initialize_browser()
-                except Exception as browser_error:
-                    logger.error(f"Tarayıcı yeniden başlatma hatası: {browser_error}")
+                # First priority: Reply to tweets
+                logger.info("Starting tweet reply task...")
+                for account in MONITORED_ACCOUNTS:
+                    try:
+                        logger.info(f"Checking tweets from {account}...")
+                        tweets = await browse_tweets_v2(page, account, limit=1)
+                        
+                        if tweets:
+                            latest_tweet = tweets[0]
+                            reply_text = generate_reply(latest_tweet['text'])
+                            
+                            if reply_text:
+                                logger.info(f"Replying to tweet from {account}")
+                                success = await reply_to_tweet(page, latest_tweet['url'], reply_text)
+                                if success:
+                                    logger.info(f"Successfully replied to {account}'s tweet")
+                                else:
+                                    logger.error(f"Failed to reply to {account}'s tweet")
+                            
+                            # Add delay between replies
+                            await human_like_delay(30000, 45000)
+                    
+                    except Exception as e:
+                        logger.error(f"Error processing account {account}: {e}")
+                        continue
                 
-                time.sleep(300)  # Hata durumunda 5 dakika bekle
+                # Wait before next iteration
+                await asyncio.sleep(3600)  # 1 hour
                 
+            except Exception as loop_error:
+                logger.error(f"Error in main loop: {loop_error}")
+                await asyncio.sleep(300)  # 5 minutes
+                
+    except Exception as e:
+        logger.error(f"Fatal error in main loop: {e}")
+        raise
+
+def start_http_server():
+    """Start HTTP server in a separate thread"""
+    global httpd
+    try:
+        httpd = socketserver.TCPServer(("", 10000), SimpleHandler)
+        logger.info("HTTP sunucusu port 10000 üzerinde başlatıldı")
+        httpd.serve_forever()
+    except Exception as e:
+        logger.error(f"HTTP sunucu hatası: {e}")
+
+if __name__ == "__main__":
+    try:
+        # Start HTTP server in a separate thread
+        http_thread = threading.Thread(target=start_http_server, daemon=True)
+        http_thread.start()
+        logger.info("HTTP sunucu thread'i başlatıldı")
+
+        # Run the bot using asyncio
+        asyncio.run(run_bot())
+
     except KeyboardInterrupt:
-        logger.info("Program kullanıcı tarafından sonlandırıldı")
-        cleanup_browser(browser)
+        logger.info("Bot durduruldu (Ctrl+C)")
+        if httpd:
+            httpd.shutdown()
+            httpd.server_close()
     except Exception as e:
         logger.error(f"Beklenmeyen hata: {e}")
-        traceback.print_exc()
-        cleanup_browser(browser)
+        if httpd:
+            httpd.shutdown()
+            httpd.server_close()
+        raise

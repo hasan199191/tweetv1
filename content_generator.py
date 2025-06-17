@@ -1,8 +1,10 @@
 import os
-import random
 from dotenv import load_dotenv
-import google.generativeai as genai
 import textwrap
+from logging import getLogger
+import random
+import google.generativeai as genai
+from config import PROJECTS
 
 # Load environment variables
 load_dotenv()
@@ -29,6 +31,8 @@ FALLBACK_CONTENT = [
     
     "@{handle} is one to watch in the evolving Web3 landscape. Their focus on {problem} addresses a critical need, and their technical execution appears solid. Interested to see their ecosystem growth in Q3/Q4. #Blockchain #Innovation #{hashtag}"
 ]
+
+logger = getLogger(__name__)
 
 def generate_web3_reply(tweet_text, keyword=None):
     """Generate a reply to a tweet, optionally focused on a keyword"""
@@ -67,66 +71,19 @@ def generate_web3_reply(tweet_text, keyword=None):
         reply = random.choice(FALLBACK_REPLIES)
         return reply
 
-def generate_web3_content(project):
-    """Generate original content about a Web3 project"""
-    
-    # Extract project data
-    project_name = project.get('name', 'Web3 project')
-    twitter_handle = project.get('twitter', '@web3project').replace('@', '')
-    website = project.get('website', 'project.com')
-    
-    # Problem or sector options
-    problems = ["scalability", "interoperability", "security", "user onboarding", "data privacy", "transaction costs", "governance"]
-    sectors = ["DeFi", "gaming", "NFT", "social media", "identity", "data storage", "infrastructure"]
-    
-    prompt = f"""
-    You are an expert Web3 analyst and Twitter content creator specializing in blockchain, DeFi, and crypto projects.
-    
-    Generate an original, well-researched, and engaging Twitter post about {project_name} (Twitter: @{twitter_handle}, Website: {website}).
-    
-    Your content should:
-    - Start by mentioning the project's Twitter handle: @{twitter_handle}
-    - Educate and inform about recent developments, trends, or insights related to this project
-    - Use clear, human-like language that is accessible but professional
-    - Include examples, use cases, or recent news where relevant
-    - Be formatted to respect Twitter's 280 character limit per tweet
-    - Avoid clichés, jargon, and generic content
-    - Inspire community engagement and thoughtful discussion
-    - Include 1-2 relevant hashtags
-    
-    If the content is longer than 280 characters, organize it as a numbered thread (e.g., 1/3, 2/3, etc.), with each tweet under 280 characters.
-    
-    Provide ONLY the tweet content, with clear indications of tweet breaks if it's a thread.
-    """
-    
+def generate_web3_content():
+    """Generate content about a random web3 project"""
     try:
-        response = model.generate_content(prompt)
-        content = response.text.strip()
-        
-        # Ensure correct thread format if needed
-        # If not and longer than 280 chars, split it
-        if len(content) > 280 and "1/" not in content:
-            tweets = split_into_tweets(content)
-            content = "\n\n".join(tweets)
-        
-        return content
-    except Exception as e:
-        print(f"Gemini API content generation error: {e}")
-        
-        # Use fallback content
-        random_problem = random.choice(problems)
-        random_sector = random.choice(sectors)
-        
-        template = random.choice(FALLBACK_CONTENT)
-        content = template.format(
-            project=project_name,
-            handle=twitter_handle,
-            problem=random_problem,
-            sector=random_sector,
-            hashtag=project_name.replace(" ", "")
+        project = random.choice(PROJECTS)
+        content = (
+            f"{project['name']}'s ({project['twitter']}) novel approach to "
+            f"blockchain technology is making waves. Check out their latest "
+            f"updates at {project['website']}! #web3 #crypto"
         )
-        
-        return content
+        return project['name'], content
+    except Exception as e:
+        logger.error(f"Error generating content: {e}")
+        return None, None
 
 def split_into_tweets(text, max_length=280):
     """Split a long text into multiple tweets"""
