@@ -633,20 +633,17 @@ def perform_browser_health_check():
             logger.error(f"Recovery after health check failed: {recover_e}")
 
 def generate_content():
-    projects = ["Arbitrum", "zkSync", "Polygon", "Optimism"]
+    projects = [
+        "Arbitrum", "zkSync", "Polygon", "Optimism", 
+        "LayerZero", "Scroll", "Base", "Linea"
+    ]
     selected_project = random.choice(projects)
     
     content = f"Exciting updates from {selected_project}! Stay tuned for more developments. #web3 #crypto"
     return selected_project, content
 
-def generate_web3_content():
-    """Generate random web3 content"""
-    projects = ["Arbitrum", "zkSync", "Polygon", "Optimism"]
-    selected_project = random.choice(projects)
-    content = f"Exciting updates from {selected_project}! Stay tuned for more developments. #web3 #crypto"
-    return selected_project, content
-
 def main():
+    browser = None
     try:
         logger.info("Browser initialization attempt 1 of 3")
         logger.info("Initializing browser...")
@@ -655,9 +652,10 @@ def main():
         
         if browser and page:
             logger.info("Browser initialized and logged in to Twitter")
+            time.sleep(2)  # Wait for session to stabilize
             
             # Generate and post content
-            project, content = generate_web3_content()
+            project, content = generate_content()
             logger.info(f"Selected project: {project}")
             
             success = post_tweet_thread_v2(page, content)
@@ -665,12 +663,12 @@ def main():
                 logger.info(f"Successfully posted about {project}")
             else:
                 logger.error(f"Failed to post about {project}")
-                
     except Exception as e:
-        logger.error(f"Main error: {e}")
+        logger.error(f"Main execution error: {e}")
     finally:
-        if 'browser' in locals():
+        if browser:
             cleanup_browser(browser)
+            logger.info("Browser cleanup completed")
 
 # For testing different functions individually
 def test_mode():
