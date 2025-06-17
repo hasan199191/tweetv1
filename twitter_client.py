@@ -241,3 +241,106 @@ async def wait_for_and_click(page, selectors, timeout=5000):
         except Exception:
             continue
     return False
+
+async def post_tweet_thread_v2(page, content):
+    """Post a tweet or thread of tweets with modern selectors"""
+    try:
+        # Click on tweet button
+        tweet_button_selectors = [
+            "[data-testid='SideNav_NewTweet_Button']",
+            "[data-testid='tweetButtonInline']",
+            "[href='/compose/tweet']"
+        ]
+        
+        logger.info("Looking for tweet compose button...")
+        if not await wait_for_and_click(page, tweet_button_selectors, timeout=10000):
+            logger.error("Could not find tweet compose button")
+            await take_error_screenshot(page, "compose_button_error.png")
+            return False
+
+        await asyncio.sleep(2)
+
+        # Wait for and click the text area
+        logger.info("Looking for tweet textarea...")
+        textarea_selectors = [
+            "[data-testid='tweetTextarea_0']",
+            "div[role='textbox']",
+            "[contenteditable='true']"
+        ]
+
+        textarea = None
+        for selector in textarea_selectors:
+            try:
+                textarea = await page.wait_for_selector(selector, timeout=10000)
+                if textarea:
+                    logger.info(f"Found textarea with selector: {selector}")
+                    break
+            except Exception:
+                continue
+
+        if not textarea:
+            logger.error("Could not find tweet textarea")
+            await take_error_screenshot(page, "textarea_missing.png")
+            return False
+
+        # If content is a string, convert it to a list
+        if isinstance(content, str):
+            content = [content]
+
+        # Post each tweet in the thread
+        for i, tweet_text in enumerate(content):
+            try:
+                logger.info(f"Posting tweet {i+1} of {len(content)}")
+                
+                # Clear existing text
+                await textarea.click()
+                await page.keyboard.press("Control+A")
+                await page.keyboard.press("Backspace")
+                await asyncio.sleep(1)
+
+                # Type tweet text
+                await textarea.fill(tweet_text)
+                await asyncio.sleep(2)
+
+                # Look for and click the tweet/post button
+                post_button_selectors = [
+                    "[data-testid='tweetButton']",
+                    "div[role='button']:has-text('Post')",
+                    "div[role='button']:has-text('Tweet')"
+                ]
+
+                if not await wait_for_and_click(page, post_button_selectors, timeout=10000):
+                    logger.error("Could not find post button")
+                    await take_error_screenshot(page, f"post_button_error_{i}.png")
+                    return False
+
+                # Wait between tweets in a thread
+                await asyncio.sleep(3)
+
+                # If there are more tweets, look for and click the Add button
+                if i < len(content) - 1:
+                    add_button_selectors = [
+                        "[data-testid='addButton']",
+                        "div[role='button']:has-text('Add')",
+                        "span:has-text('Add')"
+                    ]
+
+                    if not await wait_for_and_click(page, add_button_selectors, timeout=10000):
+                        logger.error("Could not find add button for thread")
+                        await take_error_screenshot(page, f"add_button_error_{i}.png")
+                        return False
+
+                    await asyncio.sleep(2)
+
+            except Exception as e:
+                logger.error(f"Error posting tweet {i+1}: {e}")
+                await take_error_screenshot(page, f"tweet_error_{i}.png")
+                return False
+
+        logger.info("Successfully posted all tweets")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error in post_tweet_thread_v2: {e}")
+        await take_error_screenshot(page, "tweet_thread_error.png")
+        return False

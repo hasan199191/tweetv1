@@ -13,9 +13,8 @@ import socketserver
 from logging import getLogger
 import google.generativeai as genai
 from dotenv import load_dotenv
-from twitter_client import login, post_tweet_thread_v2, cleanup_browser
+from twitter_client import login, post_tweet_thread_v2, cleanup_browser, browse_tweets_v2, human_like_delay, reply_to_tweet
 from datetime import datetime, timedelta
-from twitter_client import browse_tweets_v2, human_like_delay, reply_to_tweet
 import importlib
 from replier import generate_reply
 import asyncio
@@ -296,25 +295,21 @@ async def check_tweets_and_reply():
         logger.error(f"Tweet check error: {e}")
         traceback.print_exc()
 
-def post_web3_content(page, project, content):
-    """Post a tweet about a random Web3 project"""
+async def post_web3_content(page, project, content):
+    """Post content about a Web3 project"""
     try:
-        if not page:
-            logger.warning("Page is None, initializing browser...")
-            browser, page = initialize_browser()
-            
-        logger.info(f"Posting tweet about {project}")
-        success = post_tweet_thread_v2(page, content)
+        logger.info(f"Posting content for {project}...")
+        success = await post_tweet_thread_v2(page, content)
         
         if success:
-            logger.info(f"Successfully posted about {project}")
+            logger.info(f"Successfully posted content for {project}")
             return True
         else:
-            logger.error(f"Failed to post tweet(s) about {project}")
+            logger.error(f"Failed to post content for {project}")
             return False
             
     except Exception as e:
-        logger.error(f"Error in post_web3_content: {e}")
+        logger.error(f"Error posting content for {project}: {e}")
         return False
 
 def debug_thread():
