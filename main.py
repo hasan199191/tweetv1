@@ -6,51 +6,31 @@ import random
 import logging
 import schedule
 import traceback
-<<<<<<< HEAD
-import re  # Akıllı içerik bölme için eklendi
-# import openai  # Bu satırı tamamen kaldırın
-import importlib  # importlib import'u eklendi
-import google.generativeai as genai
-from dotenv import load_dotenv  # Eksik import eklendi
-from twitter_client import login, post_tweet, post_tweet_thread_v2, post_manual_thread, reply_to_tweet, browse_tweets_v2, human_like_delay, cleanup_browser, initialize_browser
-from datetime import datetime, timedelta
-=======
 import re
 import threading
 import http.server
 import socketserver
+from logging import getLogger
 import google.generativeai as genai
 from dotenv import load_dotenv
-from twitter_client import login, post_tweet, post_tweet_thread_v2, post_manual_thread, reply_to_tweet, browse_tweets_v2, human_like_delay, cleanup_browser, initialize_browser
-from datetime import datetime, timedelta
-import subprocess  # Yeni eklenen: subprocess modülü
->>>>>>> f4388a922d2200e1f77423b49535a16de066a037
+from twitter_client import login, post_tweet, post_tweet_thread_v2, reply_to_tweet, browse_tweets_v2, human_like_delay, cleanup_browser, initialize_browser
+
+logger = getLogger(__name__)
 
 # Logging configuration
 logging.basicConfig(level=logging.INFO, 
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     handlers=[logging.FileHandler("web3bot.log"), 
                              logging.StreamHandler()])
-logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
 
-<<<<<<< HEAD
-# OpenAI yapılandırma kodunu kaldırın
-# OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-# if OPENAI_API_KEY:
-#     openai.api_key = OPENAI_API_KEY
-
-=======
->>>>>>> f4388a922d2200e1f77423b49535a16de066a037
 # Configure Gemini API  
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-<<<<<<< HEAD
-=======
 # HTTP sunucusu için global değişkenler
 httpd = None
 
@@ -78,7 +58,6 @@ def start_http_server():
     except Exception as e:
         logger.error(f"HTTP sunucu hatası: {e}")
 
->>>>>>> f4388a922d2200e1f77423b49535a16de066a037
 # Global browser and page objects
 browser = None
 page = None
@@ -161,42 +140,6 @@ def reload_modules():
     except Exception as e:
         logger.error(f"Module reload error: {e}")
 
-<<<<<<< HEAD
-def initialize_browser():
-    """Initialize browser and set global variables"""
-    global browser, page
-    
-    try:
-        if browser is None:
-            logger.info("Initializing browser...")
-            browser, page = login()
-            logger.info("Browser initialized and logged in to Twitter")
-        else:
-            logger.info("Browser already running")
-            
-            # Check if page is still open
-            try:
-                # Simple check - get URL
-                current_url = page.url
-                logger.info(f"Current page URL: {current_url}")
-            except Exception as e:
-                logger.warning(f"Page check error: {e}")
-                logger.info("Opening new page...")
-                page = browser.new_page()
-                page.goto("https://twitter.com/home")
-    except Exception as e:
-        logger.error(f"Browser initialization error: {e}")
-        # Clean up old session and restart
-        try:
-            cleanup_browser()
-            browser, page = login()
-            logger.info("Browser restarted")
-        except Exception as restart_e:
-            logger.error(f"Failed to restart browser: {restart_e}")
-            raise  # Re-raise to handle in main
-        
-    return browser, page
-=======
 def initialize_browser(max_attempts=3, wait_time=5):
     """Initialize browser with retry logic"""
     global browser, page
@@ -238,7 +181,6 @@ def initialize_browser(max_attempts=3, wait_time=5):
                 return None, None
     
     return None, None
->>>>>>> f4388a922d2200e1f77423b49535a16de066a037
 
 def cleanup_browser():
     """Close browser cleanly"""
@@ -356,41 +298,26 @@ def check_tweets_and_reply():
         logger.error(f"Tweet check error: {e}")
         traceback.print_exc()
 
-def post_web3_content():
+def post_web3_content(project, content):
     """Post a tweet about a random Web3 project"""
     try:
-        # Choose a random project from our list
-        project = random.choice(PROJECTS)
-        logger.info(f"Selected project for posting: {project['name']}")
-        
-        # Get content using Gemini
-        content = generate_web3_content(project)  # Artık bir tweet listesi döndürür
-        
-        # Check if we have a valid page
-        global browser, page
-        if page is None:
+        browser, page = initialize_browser()
+        if not browser or not page:
             logger.warning("Page is None, initializing browser...")
             browser, page = initialize_browser()
-        
-        # Post the tweet(s)
-        logger.info(f"Posting tweet about {project['name']}")
-        
-        # If there's only one tweet, use post_tweet
-        if len(content) == 1:
-            success = post_tweet(page, content[0])
-        # If multiple tweets (a thread), use post_tweet_thread_v2
-        else:
-            success = post_tweet_thread_v2(page, content)
+            
+        logger.info(f"Posting tweet about {project}")
+        success = post_tweet_thread_v2(page, content)
         
         if success:
-            logger.info(f"Successfully posted tweet(s) about {project['name']}")
+            logger.info(f"Successfully posted about {project}")
+            return True
         else:
-            logger.error(f"Failed to post tweet(s) about {project['name']}")
+            logger.error(f"Failed to post tweet(s) about {project}")
+            return False
             
-        return success
     except Exception as e:
         logger.error(f"Error in post_web3_content: {e}")
-        traceback.print_exc()
         return False
 
 def debug_thread():
@@ -706,16 +633,16 @@ def perform_browser_health_check():
             logger.error(f"Recovery after health check failed: {recover_e}")
 
 def main():
-<<<<<<< HEAD
-<<<<<<< HEAD
+    # Set the .env file with login credentials if not already set
+    if "TWITTER_USER" not in os.environ:
+        os.environ["TWITTER_USER"] = "chefcryptoz"
+    if "TWITTER_PASS" not in os.environ:
+        os.environ["TWITTER_PASS"] = "Nuray1965+"
+    
     try:
-        # Global variables for browser session
-        global playwright, browser, page
-        
         logger.info("Browser initialization attempt 1 of 3")
         logger.info("Initializing browser...")
         
-        # Get playwright instance along with browser and page
         playwright, browser, page = login()
         
         if browser and page:
@@ -761,98 +688,11 @@ def main():
             logger.error("Failed to initialize browser")
             
     except Exception as e:
-        logger.error(f"Main error: {e}")
-    
-    finally:
-        if 'browser' in globals() and browser:
-            try:
-                browser.close()
-            except Exception as e:
-                logger.error(f"Browser close error: {e}")
-        if 'playwright' in globals() and playwright:
-            try:
-                playwright.stop()
-            except Exception as e:
-                logger.error(f"Playwright stop error: {e}")
-=======
-=======
->>>>>>> f4388a922d2200e1f77423b49535a16de066a037
-    # Set the .env file with login credentials if not already set
-    if "TWITTER_USER" not in os.environ:
-        os.environ["TWITTER_USER"] = "chefcryptoz"
-    if "TWITTER_PASS" not in os.environ:
-        os.environ["TWITTER_PASS"] = "Nuray1965+"
-    
-    try:
-        # Initialize browser - only once
-        browser_initialized = False
-        max_attempts = 3
-        attempt = 0
-        
-        while not browser_initialized and attempt < max_attempts:
-            try:
-                attempt += 1
-                logger.info(f"Browser initialization attempt {attempt} of {max_attempts}")
-                initialize_browser()
-                browser_initialized = True
-            except Exception as e:
-                logger.error(f"Browser initialization failed on attempt {attempt}: {e}")
-                if attempt < max_attempts:
-                    logger.info("Waiting 5 seconds before retrying...")
-                    time.sleep(5)
-                else:
-                    logger.error("Maximum browser initialization attempts reached. Exiting.")
-                    raise
-        
-        # Run in scheduled mode
-        logger.info("Starting scheduled operation...")
-        
-        # More sophisticated scheduling
-        # Post content at specific hours to maximize engagement
-        schedule.every().day.at("08:00").do(post_web3_content)  # Morning post
-        schedule.every().day.at("12:30").do(post_web3_content)  # Lunch time post
-        schedule.every().day.at("17:00").do(post_web3_content)  # Evening post
-        schedule.every().day.at("20:00").do(post_web3_content)  # Night post
-        
-        # Check and reply to tweets every 2 hours
-        for hour in range(0, 24, 2):
-            schedule.every().day.at(f"{hour:02d}:15").do(check_tweets_and_reply)
-        
-        # Browser health check every 12 hours
-        schedule.every(12).hours.do(perform_browser_health_check)
-        
-        # Initial run on startup
-        post_web3_content()
-        human_like_delay(5000, 10000)
-        check_tweets_and_reply()
-        
-        # Main loop
-        while True:
-            try:
-                schedule.run_pending()
-                time.sleep(60)
-            except Exception as loop_e:
-                logger.error(f"Schedule loop error: {loop_e}")
-                # Try to recover
-                try:
-                    cleanup_browser()
-                    initialize_browser()
-                    logger.info("Browser restarted after loop error")
-                except Exception as recover_e:
-                    logger.error(f"Recovery failed: {recover_e}")
-                    # Wait before next attempt
-                    time.sleep(300)
-    
-    except Exception as e:
         logger.error(f"Main execution error: {e}")
         traceback.print_exc()
     finally:
-        # Clean up when script exits
-        cleanup_browser()
-<<<<<<< HEAD
->>>>>>> 451dcb3171eb2ab29384ce86bbe2016da6887529
-=======
->>>>>>> f4388a922d2200e1f77423b49535a16de066a037
+        if 'browser' in locals() and browser:
+            browser.close()
 
 # For testing different functions individually
 def test_mode():
@@ -899,17 +739,6 @@ def test_mode():
         # Optionally close browser after testing
         cleanup_browser()
 
-<<<<<<< HEAD
-if __name__ == "__main__":
-    # Set to False for testing individual functions
-    production_mode = True
-    
-    # For production deployment:
-    if production_mode:
-        main()
-    else:
-        test_mode()
-=======
 # Ana kod bloğu - DOSYANIN EN SONUNA
 if __name__ == "__main__":
     try:
@@ -953,4 +782,3 @@ if __name__ == "__main__":
         logger.error(f"Beklenmeyen hata: {e}")
         traceback.print_exc()
         cleanup_browser(browser)
->>>>>>> f4388a922d2200e1f77423b49535a16de066a037
