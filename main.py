@@ -633,66 +633,25 @@ def perform_browser_health_check():
             logger.error(f"Recovery after health check failed: {recover_e}")
 
 def main():
-    # Set the .env file with login credentials if not already set
-    if "TWITTER_USER" not in os.environ:
-        os.environ["TWITTER_USER"] = "chefcryptoz"
-    if "TWITTER_PASS" not in os.environ:
-        os.environ["TWITTER_PASS"] = "Nuray1965+"
-    
     try:
-        logger.info("Browser initialization attempt 1 of 3")
-        logger.info("Initializing browser...")
-        
-        playwright, browser, page = login()
+        # Initialize browser
+        browser, page = login(headless=True)  # Pass headless parameter
         
         if browser and page:
-            logger.info("Browser initialized and logged in to Twitter")
-            logger.info("Starting scheduled operation...")
+            # Generate content
+            project = "Your Project Name"
+            content = "Your tweet content here"
             
-            # Post content at specific hours to maximize engagement
-            schedule.every().day.at("08:00").do(post_web3_content)  # Morning post
-            schedule.every().day.at("12:30").do(post_web3_content)  # Lunch time post
-            schedule.every().day.at("17:00").do(post_web3_content)  # Evening post
-            schedule.every().day.at("20:00").do(post_web3_content)  # Night post
+            # Post content with required arguments
+            success = post_web3_content(project, content)
             
-            # Check and reply to tweets every 2 hours
-            for hour in range(0, 24, 2):
-                schedule.every().day.at(f"{hour:02d}:15").do(check_tweets_and_reply)
-            
-            # Browser health check every 12 hours
-            schedule.every(12).hours.do(perform_browser_health_check)
-            
-            # Initial run on startup
-            post_web3_content()
-            human_like_delay(5000, 10000)
-            check_tweets_and_reply()
-            
-            # Main loop
-            while True:
-                try:
-                    schedule.run_pending()
-                    time.sleep(60)
-                except Exception as loop_e:
-                    logger.error(f"Schedule loop error: {loop_e}")
-                    # Try to recover
-                    try:
-                        cleanup_browser()
-                        initialize_browser()
-                        logger.info("Browser restarted after loop error")
-                    except Exception as recover_e:
-                        logger.error(f"Recovery failed: {recover_e}")
-                        # Wait before next attempt
-                        time.sleep(300)
-    
-        else:
-            logger.error("Failed to initialize browser")
-            
+            if not success:
+                logger.error("Failed to post content")
+                
     except Exception as e:
-        logger.error(f"Main execution error: {e}")
-        traceback.print_exc()
+        logger.error(f"Main error: {e}")
     finally:
-        if 'browser' in locals() and browser:
-            browser.close()
+        cleanup_browser(browser)  # Pass browser instance to cleanup
 
 # For testing different functions individually
 def test_mode():
