@@ -13,7 +13,7 @@ import socketserver
 from logging import getLogger
 import google.generativeai as genai
 from dotenv import load_dotenv
-from twitter_client import login, post_tweet, post_tweet_thread_v2, reply_to_tweet, browse_tweets_v2, human_like_delay, cleanup_browser, initialize_browser
+from twitter_client import login, post_tweet_thread_v2, cleanup_browser
 
 logger = getLogger(__name__)
 
@@ -632,26 +632,42 @@ def perform_browser_health_check():
         except Exception as recover_e:
             logger.error(f"Recovery after health check failed: {recover_e}")
 
+def generate_content():
+    projects = ["Arbitrum", "zkSync", "Polygon", "Optimism"]
+    selected_project = random.choice(projects)
+    
+    content = f"Exciting updates from {selected_project}! Stay tuned for more developments. #web3 #crypto"
+    return selected_project, content
+
 def main():
     try:
-        # Initialize browser
-        browser, page = login(headless=True)  # Pass headless parameter
+        logger.info("Browser initialization attempt 1 of 3")
+        logger.info("Initializing browser...")
+        
+        browser, page = login(headless=True)  # For Render, use headless mode
         
         if browser and page:
+            logger.info("Browser initialized and logged in to Twitter")
+            
             # Generate content
-            project = "Your Project Name"
-            content = "Your tweet content here"
+            project, content = generate_content()
+            logger.info(f"Selected project: {project}")
             
-            # Post content with required arguments
-            success = post_web3_content(project, content)
-            
-            if not success:
-                logger.error("Failed to post content")
+            # Post content
+            try:
+                success = post_tweet_thread_v2(page, content)
+                if success:
+                    logger.info(f"Successfully posted about {project}")
+                else:
+                    logger.error(f"Failed to post about {project}")
+            except Exception as e:
+                logger.error(f"Error posting content: {e}")
                 
     except Exception as e:
         logger.error(f"Main error: {e}")
     finally:
-        cleanup_browser(browser)  # Pass browser instance to cleanup
+        if 'browser' in locals():
+            cleanup_browser(browser)
 
 # For testing different functions individually
 def test_mode():
