@@ -5,29 +5,16 @@ import json
 import pathlib
 from playwright.sync_api import sync_playwright, expect
 import re  # Import re for regular expression operations
-<<<<<<< HEAD
-<<<<<<< HEAD
 from email_reader import EmailReader
 import logging
 import traceback
-=======
->>>>>>> 451dcb3171eb2ab29384ce86bbe2016da6887529
-=======
-from email_reader import get_twitter_verification_code
->>>>>>> f4388a922d2200e1f77423b49535a16de066a037
 
 # Create directory to store browser session data
 USER_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "browser_profile")
 os.makedirs(USER_DATA_DIR, exist_ok=True)
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 logger = logging.getLogger(__name__)
 
-=======
->>>>>>> 451dcb3171eb2ab29384ce86bbe2016da6887529
-=======
->>>>>>> f4388a922d2200e1f77423b49535a16de066a037
 def human_like_delay(min_ms=500, max_ms=1500):
     """Wait for a random amount of time like a human would"""
     delay = random.uniform(min_ms, max_ms) / 1000.0
@@ -119,92 +106,7 @@ def type_like_human(page, selector, text):
 browser = None
 page = None
 
-<<<<<<< HEAD
 def login():
-<<<<<<< HEAD
-    try:
-        p = sync_playwright().start()
-        browser = p.chromium.launch_persistent_context(
-            "./browser_data",  # This directory stores browser session
-            headless=False,
-            viewport={'width': 1280, 'height': 720}
-        )
-        
-        page = browser.new_page()
-        logger.info("Checking login status...")
-        
-        # Check existing session
-        page.goto("https://twitter.com/home")
-        time.sleep(3)
-        
-        if "home" in page.url and not "login" in page.url:
-            logger.info("Already logged in, using existing session")
-            return p, browser, page
-            
-        # Need to login
-        logger.info("Need to login, starting login process...")
-        page.goto("https://twitter.com/login")
-        time.sleep(2)
-        
-        # Username
-        username_input = page.wait_for_selector('input[autocomplete="username"]')
-        username_input.fill("chefcryptoz")
-        page.keyboard.press('Enter')
-        time.sleep(2)
-        
-        # Password
-        password_input = page.wait_for_selector('input[name="password"]')
-        password_input.fill("Nuray1965+")
-        page.keyboard.press('Enter')
-        time.sleep(3)
-        
-        # Handle verification if needed
-        try:
-            verification_input = page.wait_for_selector('input[data-testid="challenge_response"]', timeout=10000)
-            
-            if verification_input:
-                logger.info("Verification code requested, checking email...")
-                email_reader = EmailReader()
-                
-                for attempt in range(3):
-                    code = email_reader.get_verification_code()
-                    if code:
-                        logger.info(f"Found verification code: {code}")
-                        verification_input.fill(code)
-                        time.sleep(1)
-                        
-                        submit_button = page.wait_for_selector('[data-testid="ocfEnterTextNextButton"]')
-                        if submit_button:
-                            submit_button.click()
-                        else:
-                            page.keyboard.press('Enter')
-                            
-                        time.sleep(5)
-                        
-                        if "home" in page.url:
-                            logger.info("Successfully verified and logged in!")
-                            return p, browser, page
-                            
-                    logger.info(f"Verification attempt {attempt + 1} failed, retrying...")
-                    time.sleep(3)
-                    
-        except Exception as e:
-            logger.error(f"Verification handling error: {e}")
-        
-        # Final login check
-        if "home" in page.url:
-            logger.info("Login successful!")
-            return p, browser, page
-            
-        logger.error("Login failed")
-        return None, None, None
-        
-    except Exception as e:
-        logger.error(f"Login error: {e}")
-        if 'p' in locals():
-            p.stop()
-        return None, None, None
-=======
     """Log in to Twitter and return browser and page objects"""
     global browser, page
     
@@ -430,205 +332,6 @@ def login():
             print(f"Could not save screenshot: {scr_e}")
     
     return browser, page
->>>>>>> 451dcb3171eb2ab29384ce86bbe2016da6887529
-=======
-def login(headless=True):
-    """Log in to Twitter and return browser and page objects"""
-    try:
-        print("Initializing browser...")
-        p = sync_playwright().start()
-        browser_type = p.chromium
-        
-        # Stealth browser launch settings
-        browser = browser_type.launch(
-            headless=headless,
-            args=[
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--disable-gpu',
-                '--window-size=1280,720',
-                '--disable-web-security',
-                '--disable-features=IsolateOrigins,site-per-process',
-                '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
-            ]
-        )
-        
-        # Set the context with more realistic browser settings
-        context = browser.new_context(
-            viewport={'width': 1280, 'height': 720},
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
-            locale='en-US',
-            timezone_id='America/New_York',
-            geolocation={'longitude': -74.006, 'latitude': 40.7128},
-            permissions=['geolocation']
-        )
-        
-        # Enable stealth mode via JavaScript
-        context.add_init_script("""
-        Object.defineProperty(navigator, 'webdriver', {
-          get: () => false,
-        });
-        window.chrome = {
-          runtime: {},
-        };
-        """)
-        
-        # Create page with increased timeout
-        page = context.new_page()
-        page.set_default_timeout(60000)  # 60 seconds
-        
-        # Twitter credentials
-        username = os.environ.get("TWITTER_USER", "")
-        password = os.environ.get("TWITTER_PASS", "")
-        
-        # Direct login attempt - new algorithm
-        try:
-            # Go to login page directly
-            print("Going to Twitter login page...")
-            page.goto("https://twitter.com/i/flow/login", wait_until="networkidle", timeout=60000)
-            page.wait_for_load_state("networkidle")
-            page.screenshot(path="login_page.png")
-            
-            # Wait for username field
-            print("Waiting for username field...")
-            username_selector = "input[autocomplete='username']"
-            page.wait_for_selector(username_selector, state="visible", timeout=15000)
-            
-            # Fill username field
-            print(f"Entering username: {username}")
-            username_field = page.query_selector(username_selector)
-            if not username_field:
-                raise Exception("Username field not found")
-            
-            username_field.click()
-            page.wait_for_timeout(1000)
-            username_field.fill("")  # Clear field
-            page.wait_for_timeout(500)
-            type_human_like(username_field, username)
-            page.wait_for_timeout(2000)
-            
-            # Click next button
-            next_button = page.query_selector("div[role='button']:has-text('Next')")
-            if next_button:
-                next_button.click()
-            else:
-                print("Next button not found, pressing Enter...")
-                page.keyboard.press("Enter")
-            
-            # Wait for password field
-            page.wait_for_timeout(3000)
-            
-            # Check if there's a verification screen
-            try:
-                verification_field = page.query_selector("input[data-testid='ocfEnterTextTextInput']")
-                if verification_field:
-                    email = os.environ.get("TWITTER_EMAIL", "")
-                    print(f"Email verification required for: {email}")
-                    
-                    # Önce email gir
-                    verification_field.click()
-                    verification_field.fill("")
-                    type_human_like(verification_field, email)
-                    page.wait_for_timeout(1000)
-                    
-                    # Next butonunu tıkla
-                    next_button = page.query_selector("div[role='button']:has-text('Next')")
-                    if next_button:
-                        next_button.click()
-                    else:
-                        page.keyboard.press("Enter")
-                    
-                    page.wait_for_timeout(3000)
-                    
-                    # Doğrulama kodu giriş alanını kontrol et
-                    verification_code_field = page.query_selector("input[data-testid='ocfEnterTextTextInput']")
-                    if verification_code_field:
-                        # Email'den doğrulama kodunu otomatik al
-                        verification_code = get_twitter_verification_code()
-                        
-                        if verification_code:
-                            print(f"Entering verification code: {verification_code}")
-                            verification_code_field.click()
-                            verification_code_field.fill("")
-                            type_human_like(verification_code_field, verification_code)
-                            
-                            # Next butonunu tıkla
-                            next_button = page.query_selector("div[role='button']:has-text('Next')")
-                            if next_button:
-                                next_button.click()
-                            else:
-                                page.keyboard.press("Enter")
-                        
-                            page.wait_for_timeout(3000)
-                        else:
-                            print("Verification code could not be obtained!")
-                else:
-                    print("No verification needed or error: {verify_error}")
-            except Exception as verify_error:
-                print(f"Verification handling error: {verify_error}")
-            
-            # Password field
-            print("Looking for password field...")
-            password_selector = "input[name='password']"
-            page.wait_for_selector(password_selector, state="visible", timeout=15000)
-            
-            password_field = page.query_selector(password_selector)
-            if not password_field:
-                raise Exception("Password field not found")
-            
-            print("Entering password...")
-            password_field.click()
-            page.wait_for_timeout(1000)
-            password_field.fill("")
-            page.wait_for_timeout(500)
-            type_human_like(password_field, password)
-            page.wait_for_timeout(2000)
-            
-            # Click login button
-            login_button = page.query_selector("div[role='button']:has-text('Log in')")
-            if login_button:
-                login_button.click()
-            else:
-                print("Login button not found, pressing Enter...")
-                page.keyboard.press("Enter")
-            
-            # Wait for login to complete
-            print("Waiting for login to complete...")
-            page.wait_for_timeout(10000)
-            
-            # Take screenshot for debugging
-            page.screenshot(path="after_login.png")
-            
-            # Check if login successful by trying to access home
-            page.goto("https://twitter.com/home", timeout=30000)
-            page.wait_for_timeout(5000)
-            
-            # Take another screenshot
-            page.screenshot(path="home_page.png")
-            
-            # Check login status
-            if "home" in page.url:
-                print("Login successful!")
-            else:
-                print(f"Login might have failed. Current URL: {page.url}")
-            
-            return browser, page
-            
-        except Exception as login_error:
-            print(f"Login error: {login_error}")
-            page.screenshot(path="login_error.png")
-            
-            # Still return browser and page - some operations might still work
-            return browser, page
-    
-    except Exception as e:
-        print(f"Browser initialization error: {e}")
-        if 'browser' in locals() and browser:
-            browser.close()
-        raise e
->>>>>>> f4388a922d2200e1f77423b49535a16de066a037
 
 def get_verification_code():
     """Access email to get verification code"""
@@ -715,8 +418,6 @@ def post_tweet(page, tweet_text):
         except Exception as e:
             print(f"Submit button error with selector {selector}: {e}")
     
-<<<<<<< HEAD
-<<<<<<< HEAD
     # If standard click methods fail, try JavaScript
     if not submit_button_clicked:
         try:
@@ -761,34 +462,6 @@ def post_tweet(page, tweet_text):
     except Exception as e:
         print(f"Could not verify tweet posting: {e}")
         return False
-=======
-=======
->>>>>>> f4388a922d2200e1f77423b49535a16de066a037
-    if not submit_button_clicked:
-        print("Submit button not found, trying keyboard shortcut...")
-        try:
-            page.keyboard.press("Control+Enter")
-            submit_button_clicked = True
-            print("Tweet submitted with keyboard shortcut")
-        except Exception as e:
-            print(f"Keyboard shortcut error: {e}")
-            return False
-    
-    # Wait for confirmation and return to homepage
-    human_like_delay(3000, 5000)
-    
-    # Check if we're back at the homepage or if any error messages appear
-    try:
-        page.goto("https://twitter.com/home")
-        print("Returned to homepage, operation likely successful.")
-    except Exception as e:
-        print(f"Navigation error: {e}")
-<<<<<<< HEAD
->>>>>>> 451dcb3171eb2ab29384ce86bbe2016da6887529
-=======
->>>>>>> f4388a922d2200e1f77423b49535a16de066a037
-    
-    return True
 
 def post_tweet_thread_v2(page, tweets_content):
     """Post a series of tweets as a thread"""
@@ -806,17 +479,6 @@ def post_tweet_thread_v2(page, tweets_content):
         print(f"Posting first tweet: {first_tweet[:50]}...")
         
         # Navigate to Twitter compose
-<<<<<<< HEAD
-        page.goto("https://twitter.com/compose/tweet")
-        human_like_delay(2000, 3000)
-        
-        # Enter first tweet text
-        text_area_found = False
-        textarea_selectors = [
-            "div[data-testid='tweetTextarea_0']",
-            "div[role='textbox'][contenteditable='true']",
-            "div[aria-label='Post text']"
-=======
         page.goto("https://twitter.com/compose/tweet", timeout=30000)
         human_like_delay(5000, 7000)  # Daha uzun bekleme
         
@@ -832,17 +494,10 @@ def post_tweet_thread_v2(page, tweets_content):
             "div[aria-label='Gönderi metni']",  # Türkçe arayüz için
             "div.public-DraftEditor-content",
             "div.DraftEditor-root div[contenteditable='true']"
->>>>>>> f4388a922d2200e1f77423b49535a16de066a037
         ]
         
         for selector in textarea_selectors:
             try:
-<<<<<<< HEAD
-                text_area = page.query_selector(selector)
-                if text_area:
-                    text_area.click()
-                    human_like_delay(500, 1000)
-=======
                 # Daha güvenilir bir seçici kullanım yöntemi
                 page.wait_for_selector(selector, state='visible', timeout=10000)
                 text_area = page.query_selector(selector)
@@ -856,7 +511,6 @@ def post_tweet_thread_v2(page, tweets_content):
                     human_like_delay(500, 1000)
                     
                     # İçeriği gir
->>>>>>> f4388a922d2200e1f77423b49535a16de066a037
                     text_area.fill(first_tweet)
                     text_area_found = True
                     print(f"First tweet content entered with selector: {selector}")
@@ -864,8 +518,6 @@ def post_tweet_thread_v2(page, tweets_content):
             except Exception as e:
                 print(f"Textarea error with selector {selector}: {e}")
         
-<<<<<<< HEAD
-=======
         # JavaScript ile deneme
         if not text_area_found:
             try:
@@ -901,7 +553,6 @@ def post_tweet_thread_v2(page, tweets_content):
             except Exception as js_error:
                 print(f"JavaScript error: {js_error}")
         
->>>>>>> f4388a922d2200e1f77423b49535a16de066a037
         if not text_area_found:
             print("Could not find text area for first tweet")
             return False
@@ -1167,45 +818,18 @@ def post_tweet_thread_v2(page, tweets_content):
             "div[role='button'][data-testid='tweetButton']",
             "div[role='button']:has-text('Tweet')",
             "div[role='button']:has-text('Post')",
-<<<<<<< HEAD
-<<<<<<< HEAD
             "button[data-testid='tweetButton']",
-            "[data-testid='tweetButtonInline']"
-=======
             "button[data-testid='tweetButton']"
->>>>>>> 451dcb3171eb2ab29384ce86bbe2016da6887529
-=======
-            "button[data-testid='tweetButton']"
->>>>>>> f4388a922d2200e1f77423b49535a16de066a037
         ]
         
         submit_button_clicked = False
         for selector in submit_button_selectors:
             try:
-<<<<<<< HEAD
-<<<<<<< HEAD
-                submit_button = page.wait_for_selector(selector, timeout=5000)
-=======
                 submit_button = page.query_selector(selector)
->>>>>>> 451dcb3171eb2ab29384ce86bbe2016da6887529
-=======
-                submit_button = page.query_selector(selector)
->>>>>>> f4388a922d2200e1f77423b49535a16de066a037
                 if submit_button:
                     submit_button.click()
                     submit_button_clicked = True
                     print(f"Submit button clicked with selector: {selector}")
-<<<<<<< HEAD
-<<<<<<< HEAD
-                    human_like_delay(2000, 3000)
-                    break
-                    submit_button.click()
-                    submit_button_clicked = True
-                    print(f"Submit button clicked with selector: {selector}")
-=======
->>>>>>> 451dcb3171eb2ab29384ce86bbe2016da6887529
-=======
->>>>>>> f4388a922d2200e1f77423b49535a16de066a037
                     break
             except Exception as e:
                 print(f"Submit button error with selector {selector}: {e}")
@@ -1240,34 +864,6 @@ def post_tweet_thread_v2(page, tweets_content):
             except Exception as e:
                 print(f"JavaScript submit error: {e}")
         
-<<<<<<< HEAD
-<<<<<<< HEAD
-        # If submit button still not found, take screenshot and try keyboard shortcut
-        if not submit_button_clicked:
-            print("Submit button not found, taking screenshot and trying keyboard shortcut...")
-            try:
-                page.screenshot(path="submit_button_error.png")
-                page.keyboard.press("Control+Enter")
-                submit_button_clicked = True
-                print("Tweet submitted with keyboard shortcut")
-                human_like_delay(2000, 3000)
-            except Exception as e:
-                print(f"Keyboard shortcut error: {e}")
-                return False
-
-        # Verify tweet was posted
-        try:
-            success_check = page.wait_for_selector('[data-testid="toast"]', timeout=5000)
-            if success_check:
-                print("Tweet posted successfully!")
-                return True
-        except Exception as e:
-            print(f"Could not verify tweet posting: {e}")
-            return False
-    
-=======
-=======
->>>>>>> f4388a922d2200e1f77423b49535a16de066a037
         if not submit_button_clicked:
             print("Submit button not found, trying keyboard shortcut...")
             try:
@@ -1280,10 +876,6 @@ def post_tweet_thread_v2(page, tweets_content):
         
         # Wait for confirmation
         human_like_delay(3000, 5000)
-<<<<<<< HEAD
->>>>>>> 451dcb3171eb2ab29384ce86bbe2016da6887529
-=======
->>>>>>> f4388a922d2200e1f77423b49535a16de066a037
         return True
     except Exception as e:
         print(f"Error posting thread: {e}")
