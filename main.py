@@ -231,7 +231,7 @@ def check_tweets_and_reply():
             logger.info(f"Checking tweets from {account}...")
             
             # Get recent tweets (limit to 10)
-            tweets = browse_tweets_v2(page, account, limit=10)
+            tweets = await browse_tweets_v2(page, account, limit=10)
             
             if not tweets:
                 logger.warning(f"No tweets found for {account}")
@@ -616,14 +616,14 @@ def generate_content():
     content = f"Exciting updates from {selected_project}! Stay tuned for more developments. #web3 #crypto"
     return selected_project, content
 
-def monitor_and_reply_to_tweets(page, accounts):
+async def monitor_and_reply_to_tweets(page, accounts):
     """Monitor specified accounts and reply to their tweets from the last hour."""
     try:
         logger.info("Starting tweet monitoring and reply process...")
         one_hour_ago = datetime.now() - timedelta(hours=1)
         for account in accounts:
             logger.info(f"Checking tweets from account: {account}")
-            tweets = browse_tweets_v2(page, account, limit=10)
+            tweets = await browse_tweets_v2(page, account, limit=10)
             
             if not tweets:
                 logger.info(f"No tweets found for account: {account}")
@@ -698,19 +698,16 @@ def main():
             logger.info("Browser cleanup completed")
 
 # For testing different functions individually
-def test_mode():
+async def test_mode():
     test_feature = "combined"  # "browse", "check", "post", or "combined"
-    
     try:
         # Initialize browser
-        initialize_browser()
-        
+        await initialize_browser()
         if test_feature == "browse":
-            # Just test tweet browsing
             logger.info("Starting tweet browsing test...")
-            account = "elonmusk"  # Popular account with guaranteed tweets
+            account = "elonmusk"
             logger.info(f"Checking tweets from {account}...")
-            tweets = browse_tweets_v2(page, account, limit=3)
+            tweets = await browse_tweets_v2(page, account, limit=3)
             
             # Show found tweets
             for i, tweet in enumerate(tweets):
@@ -719,15 +716,12 @@ def test_mode():
                     logger.info(f"URL: {tweet['url']}")
             
         elif test_feature == "check":
-            # Test tweet checking and replying
             logger.info("Starting tweet monitoring and reply test...")
             check_tweets_and_reply()
         elif test_feature == "post":
-            # Test content posting
             logger.info("Starting content posting test...")
             post_web3_content(page, PROJECTS[0], generate_web3_content(PROJECTS[0]))
         elif test_feature == "combined":
-            # Test all functionality
             logger.info("Starting combined test...")
             post_web3_content(page, PROJECTS[0], generate_web3_content(PROJECTS[0]))
             human_like_delay(10000, 20000)

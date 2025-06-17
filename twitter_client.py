@@ -846,219 +846,210 @@ def post_as_numbered_tweets(page, tweets_content):
     return success
 
 async def reply_to_tweet(page, tweet_url, reply_text):
-    """Reply to a specific tweet"""
-    try:
-        logger.info(f"Navigating to tweet URL: {tweet_url}")
-        
-        # Replace x.com with twitter.com if needed
-        tweet_url = tweet_url.replace("x.com", "twitter.com")
-        
-        # Navigate to the tweet
-        await page.goto(tweet_url, wait_until='networkidle')
-        await asyncio.sleep(2)  # Wait for any dynamic content
-        
-        logger.info("Looking for reply button...")
-        
-        # Try different selectors for the reply button
-        reply_selectors = [
-            'div[data-testid="reply"]',
-            'div[aria-label*="Reply"]',
-            'div[aria-label*="reply"]',
-            'div[role="button"][data-testid="reply"]',
-            'div[role="button"][aria-label*="Reply"]'
-        ]
-        
-        reply_button = None
-        for selector in reply_selectors:
-            try:
-                # Wait for the selector with a short timeout
-                reply_button = await page.wait_for_selector(selector, timeout=5000)
-                if reply_button:
-                    logger.info(f"Found reply button with selector: {selector}")
-                    break
-            except Exception as e:
-                logger.debug(f"Reply button not found with selector {selector}")
-                continue
-        
-        if not reply_button:
-            # If reply button not found, try to find it in the tweet article
-            tweet_article = await page.wait_for_selector('article[data-testid="tweet"]', timeout=5000)
-            if tweet_article:
-                reply_button = await tweet_article.query_selector('div[role="button"][aria-label*="Reply"]')
-        
-        if not reply_button:
-            # Take screenshot and log page content for debugging
-            await page.screenshot(path='reply_button_not_found.png')
-            content = await page.content()
-            logger.error(f"Reply button not found. Page content: {content[:500]}...")
-            raise Exception("Reply button not found after trying all selectors")
-        
-        # Click the reply button
-        await reply_button.click()
-        await asyncio.sleep(1)
-        
-        # Wait for the reply textarea
-        textarea_selectors = [
-            'div[data-testid="tweetTextarea_0"]',
-            'div[contenteditable="true"][aria-label*="Tweet"]',
-            'div[contenteditable="true"][aria-label*="Reply"]',
-            'div[role="textbox"]'
-        ]
-        
-        textarea = None
-        for selector in textarea_selectors:
-            try:
-                textarea = await page.wait_for_selector(selector, timeout=5000)
-                if textarea:
-                    logger.info(f"Found textarea with selector: {selector}")
-                    break
-            except Exception as e:
-                logger.debug(f"Textarea not found with selector {selector}")
-                continue
-        
-        if not textarea:
-            await page.screenshot(path='textarea_not_found.png')
-            raise Exception("Tweet textarea not found")
-        
-        # Type the reply
-        await textarea.click()
-        await asyncio.sleep(0.5)
-        await page.keyboard.type(reply_text, delay=100)
-        
-        # Look for the reply/tweet button
-        post_button_selectors = [
-            'div[data-testid="tweetButton"]',
-            'div[role="button"][data-testid="tweetButton"]',
-            'div[role="button"][aria-label*="Reply"]',
-            'div[role="button"][aria-label*="Tweet"]'
-        ]
-        
-        post_button = None
-        for selector in post_button_selectors:
-            try:
-                post_button = await page.wait_for_selector(selector, timeout=5000)
-                if post_button:
-                    logger.info(f"Found post button with selector: {selector}")
-                    break
-            except Exception as e:
-                logger.debug(f"Post button not found with selector {selector}")
-                continue
-        
-        if not post_button:
-            await page.screenshot(path='post_button_not_found.png')
-            raise Exception("Post button not found")
-        
-        # Click the post button
-        await post_button.click()
-        
-        # Wait for the tweet to be posted
-        await asyncio.sleep(3)
-        logger.info("Reply posted successfully")
-        
-        return True
-        
-    except Exception as e:
-        logger.error(f"Error replying to tweet: {str(e)}")
-        # Take a screenshot for debugging
-        try:
-            await page.screenshot(path='reply_error.png')
-            content = await page.content()
-            logger.error(f"Page content at error: {content[:500]}...")
-        except:
-            pass
+    """Reply to a specific tweet using human-like typing"""
+    if not reply_text:
+        print("No reply text provided, skipping...")
         return False
 
-async def browse_tweets_v2(page, account):
-    """Browse tweets from a specific account using new selectors"""
-    tweets = []
-    try:
-        print(f"Checking tweets from {account} account...")
-        
-        # Navigate to the user's profile
-        await page.goto(f"https://twitter.com/{account}", wait_until='networkidle')
-        await asyncio.sleep(2)  # Wait for dynamic content
-        
-        print("Waiting for tweets to load...")
-        
-        # Wait for either tweets or "no tweets" message
-        tweet_selectors = [
-            'article[data-testid="tweet"]',
-            'div[data-testid="cellInnerDiv"]',
-            'div[data-testid="tweet"]'
-        ]
-        
-        # Try each selector
-        tweets_found = False
-        for selector in tweet_selectors:
-            try:
-                await page.wait_for_selector(selector, timeout=30000)  # Increased timeout to 30 seconds
-                tweets_found = True
-                break
-            except Exception as e:
-                logger.debug(f"Tweets not found with selector {selector}: {str(e)}")
-                continue
-        
-        if not tweets_found:
-            # Take screenshot and save page content for debugging
-            await page.screenshot(path=f'no_tweets_{account}.png')
-            content = await page.content()
-            logger.error(f"No tweets found for {account} after extraction")
-            logger.error(f"Page content sample: {content[:500]}")
-            return []
-        
-        # Scroll a few times to load more tweets
-        for _ in range(3):
-            await page.evaluate("window.scrollBy(0, 1000)")
-            await asyncio.sleep(1)
-        
-        # Get all tweet elements
-        tweet_elements = []
-        for selector in tweet_selectors:
-            elements = await page.query_selector_all(selector)
-            if elements:
-                tweet_elements.extend(elements)
-                break
-        
-        print(f"Found {len(tweet_elements)} tweets for {account}")
-        
-        # Process only the first 5 tweets
-        for tweet_el in tweet_elements[:5]:
-            try:
-                # Try to get tweet text
-                tweet_text_element = await tweet_el.query_selector('div[data-testid="tweetText"]')
-                if not tweet_text_element:
-                    continue
-                
-                tweet_text = await tweet_text_element.inner_text()
-                
-                # Get tweet URL
-                link_element = await tweet_el.query_selector('a[href*="/status/"]')
-                if not link_element:
-                    continue
-                
-                href = await link_element.get_attribute('href')
-                tweet_url = f"https://twitter.com{href}"
-                
-                # Only add tweets that have both text and URL
-                if tweet_text and tweet_url:
-                    tweets.append({
-                        'text': tweet_text,
-                        'url': tweet_url,
-                        'timestamp': None  # We can add timestamp extraction if needed
-                    })
-            except Exception as e:
-                logger.error(f"Error processing tweet: {str(e)}")
-                continue
-        
-        return tweets
-        
-    except Exception as e:
-        logger.error(f"Error browsing tweets: {str(e)}")
-        # Take screenshot for debugging
+    print(f"Navigating to tweet URL: {tweet_url}")
+    await page.goto(tweet_url)
+    await human_like_delay(3000, 5000)
+    
+    print("Looking for reply button...")
+    reply_button_selectors = [
+        "button[data-testid='reply']",
+        "div[data-testid='reply']",
+        "div[aria-label='Reply']"
+    ]
+    
+    reply_button_clicked = False
+    for selector in reply_button_selectors:
         try:
-            await page.screenshot(path=f'browse_error_{account}.png')
+            # Wait for the button to be visible
+            reply_button = await page.wait_for_selector(selector, timeout=5000)
+            if reply_button:
+                await reply_button.click()
+                reply_button_clicked = True
+                print(f"Reply button clicked with selector: {selector}")
+                break
+        except Exception as e:
+            print(f"Reply button not found with selector {selector}: {e}")
+    
+    if not reply_button_clicked:
+        print("Reply button not found, taking screenshot...")
+        await page.screenshot(path="reply_button_missing.png")
+        return False
+    
+    await human_like_delay(2000, 3000)
+    
+    # Look for reply input field with wait
+    reply_input_selectors = [
+        "div[data-testid='tweetTextarea_0']",
+        "div[data-testid='tweetTextarea_0_label']",
+        "div[role='textbox']"
+    ]
+    
+    reply_input = None
+    for selector in reply_input_selectors:
+        try:
+            reply_input = await page.wait_for_selector(selector, timeout=5000)
+            if reply_input:
+                print(f"Found reply input with selector: {selector}")
+                break
+        except Exception as e:
+            print(f"Reply input not found with selector {selector}: {e}")
+    
+    if not reply_input:
+        print("Reply input field not found, taking screenshot...")
+        await page.screenshot(path="reply_input_missing.png")
+        return False
+    
+    # Type the reply with human-like delay
+    await reply_input.click()
+    await human_like_delay(500, 1000)
+    await page.keyboard.type(reply_text, delay=100)
+    await human_like_delay(1000, 2000)
+    
+    # Click reply button
+    reply_submit_selectors = [
+        "div[data-testid='tweetButton']",
+        "div[data-testid='tweetButtonInline']"
+    ]
+    
+    reply_submitted = False
+    for selector in reply_submit_selectors:
+        try:
+            submit_button = await page.wait_for_selector(selector, timeout=5000)
+            if submit_button:
+                await submit_button.click()
+                reply_submitted = True
+                print(f"Reply submitted with selector: {selector}")
+                break
+        except Exception as e:
+            print(f"Submit button not found with selector {selector}: {e}")
+    
+    if not reply_submitted:
+        print("Trying keyboard shortcut...")
+        try:
+            await page.keyboard.press("Control+Enter")
+            reply_submitted = True
+            print("Reply submitted with keyboard shortcut")
+        except Exception as e:
+            print(f"Reply keyboard shortcut error: {e}")
+            await page.screenshot(path="reply_submit_failed.png")
+            return False
+    
+    # Wait for reply to be posted
+    await human_like_delay(3000, 5000)
+    # Verify the reply was posted
+    try:
+        success_indicator = await page.wait_for_selector("div[data-testid='toast']", timeout=5000)
+        if success_indicator:
+            print("Reply posted successfully (toast notification found)")
+    except Exception as e:
+        print(f"Could not verify if reply was posted: {e}")
+    
+    return reply_submitted
+
+async def browse_tweets_v2(page, account, limit=1):
+    """Browse a user's profile and return their latest tweet."""
+    print(f"Checking tweets from {account} account...")
+    
+    try:
+        # Go to user's profile and wait for content to load
+        await page.goto(f"https://twitter.com/{account}", wait_until="networkidle")
+        await human_like_delay(3000, 5000)
+
+        # Wait for tweets to load with increased timeout
+        print("Waiting for tweets to load...")
+        try:
+            # First wait for the timeline to appear
+            await page.wait_for_selector('[data-testid="primaryColumn"]', timeout=30000)
+            # Then wait for either tweets or "No tweets" message
+            await page.wait_for_selector('article[data-testid="tweet"], [data-testid="empty-timeline"]', timeout=30000)
+        except Exception as wait_error:
+            print(f"Timeout waiting for tweets: {wait_error}")
+            # Take a screenshot for debugging
+            await page.screenshot(path=f"debug_{account}_timeline.png")
+            # Log the page content for debugging
             content = await page.content()
-            logger.error(f"Page content at error: {content[:500]}...")
+            print(f"Page content sample: {content[:200]}...")
+            return []
+
+        # Add multiple small scrolls with delays to ensure content loads
+        for _ in range(3):
+            await page.evaluate("window.scrollBy(0, 300)")
+            await human_like_delay(1000, 2000)
+
+        # Extract tweet data using updated selectors
+        tweets = await page.evaluate("""() => {
+            const tweets = [];
+            const articles = document.querySelectorAll('article[data-testid="tweet"]');
+            console.log(`Found ${articles.length} tweet elements`);
+
+            for (const article of articles) {
+                try {
+                    // Try multiple selectors for tweet text
+                    let tweetText = '';
+                    const textSelectors = [
+                        'div[data-testid="tweetText"]',
+                        'div[lang]:not([data-testid])',
+                        'div[dir="auto"]:not([data-testid])'
+                    ];
+
+                    for (const selector of textSelectors) {
+                        const textElement = article.querySelector(selector);
+                        if (textElement) {
+                            tweetText = textElement.textContent.trim();
+                            break;
+                        }
+                    }
+
+                    if (!tweetText) {
+                        console.log('No tweet text found with standard selectors, trying alternatives...');
+                        // Try to get any text content from the article as fallback
+                        tweetText = article.textContent.trim();
+                    }
+
+                    // Get tweet URL
+                    const timeElement = article.querySelector('time');
+                    const urlElement = timeElement ? timeElement.parentElement : null;
+                    const tweetUrl = urlElement ? urlElement.href : '';
+
+                    tweets.push({
+                        text: tweetText,
+                        url: tweetUrl,
+                        timestamp: timeElement ? timeElement.getAttribute('datetime') : ''
+                    });
+
+                } catch (error) {
+                    console.error('Error processing tweet:', error);
+                }
+            }
+            return tweets;
+        }""")
+
+        print(f"Found {len(tweets)} tweets for {account}")
+        if not tweets:
+            print("No tweets found after extraction")
+            # Log selectors and page structure for debugging
+            await page.evaluate("""() => {
+                console.log('Page structure:', document.body.innerHTML);
+                console.log('Tweet selectors check:',
+                    document.querySelectorAll('article[data-testid="tweet"]').length,
+                    document.querySelectorAll('div[data-testid="tweetText"]').length,
+                    document.querySelectorAll('div[lang]').length
+                );
+            }""")
+            return []
+
+        return tweets[:limit]
+
+    except Exception as e:
+        logger.error(f"Error browsing tweets for {account}: {e}")
+        # Take error screenshot
+        try:
+            await page.screenshot(path=f"error_{account}_browse.png")
         except:
             pass
         return []
