@@ -72,18 +72,82 @@ RUN printf '#!/bin/sh\n\
 COPY requirements.txt .
 RUN python3 -m pip install -r requirements.txt
 
-# Install Playwright and browsers
-RUN python3 -m pip install playwright==1.40.0 && \
-    playwright install chromium --with-deps && \
-    playwright install-deps
+# Install Playwright properly
+RUN DEBIAN_FRONTEND=noninteractive python3 -m pip install --upgrade pip && \
+    python3 -m pip install playwright==1.40.0 && \
+    python3 -m playwright install --with-deps chromium && \
+    python3 -m playwright install-deps chromium
 
 # Copy source code
 COPY . .
 
-# Ensure proper permissions for runtime
+# Set up for Playwright
+ENV PYTHONPATH=/app
+ENV NODE_PATH=/usr/lib/node_modules
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
+# Install additional dependencies for Playwright
+RUN apt-get update && apt-get install -y \
+    gconf-service \
+    libasound2 \
+    libatk1.0-0 \
+    libc6 \
+    libcairo2 \
+    libcups2 \
+    libdbus-1-3 \
+    libexpat1 \
+    libfontconfig1 \
+    libgbm1 \
+    libgcc1 \
+    libgconf-2-4 \
+    libgdk-pixbuf2.0-0 \
+    libglib2.0-0 \
+    libgtk-3-0 \
+    libnspr4 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libstdc++6 \
+    libx11-6 \
+    libx11-xcb1 \
+    libxcb1 \
+    libxcomposite1 \
+    libxcursor1 \
+    libxdamage1 \
+    libxext6 \
+    libxfixes3 \
+    libxi6 \
+    libxrandr2 \
+    libxrender1 \
+    libxss1 \
+    libxtst6 \
+    ca-certificates \
+    fonts-liberation \
+    libnss3 \
+    lsb-release \
+    xdg-utils \
+    wget \
+    xvfb && \
+    rm -rf /var/lib/apt/lists/*
+
+# Ensure proper permissions
 RUN chmod -R 777 /app && \
-    chmod +x /entrypoint.sh
+    chmod +x /entrypoint.sh && \
+    chmod -R 777 /ms-playwright
+
+# Update entrypoint to include debug info
+RUN printf '#!/bin/sh\n\
+    echo "Starting Xvfb..."\n\
+    rm -f /tmp/.X99-lock\n\
+    Xvfb :99 -screen 0 1280x1024x24 -nolisten tcp -nolisten unix &\n\
+    echo "Waiting for Xvfb..."\n\
+    sleep 2\n\
+    echo "DISPLAY=$DISPLAY"\n\
+    echo "Checking Playwright installation..."\n\
+    python3 -m playwright install chromium\n\
+    echo "Starting application..."\n\
+    exec "$@"\n' > /entrypoint.sh
 
 # Run using entrypoint script for Xvfb
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["python3", "main.py"]
+CMD ["python3", "-u", "main.py"]
