@@ -253,27 +253,27 @@ async def check_tweets_and_reply():
                     if tweet_time is None or tweet_time > one_hour_ago:
                         new_tweets.append(tweet)
             
-            # Reply to new tweets
-            if new_tweets:
+            # Reply to new tweets            if new_tweets:
                 logger.info(f"Found {len(new_tweets)} new tweets from {account} in the last hour")
-                
                 for tweet in new_tweets:
                     # Generate reply for the tweet using Gemini (OpenAI değil)
                     reply_text = generate_web3_reply(tweet['text'])  # _with_gemini kaldırıldı
-                    logger.info(f"Generated reply for {account}: {reply_text}")                        # Send the reply
-                        if 'url' in tweet:
-                            success = await reply_to_tweet(page, tweet['url'], reply_text)
-                            if success:
-                                logger.info(f"Reply successfully sent to {account}: {tweet['url']}")
-                                # Mark this tweet as replied
-                                replied_tweets[tweet['url']] = time.time()
-                            else:
-                                logger.error(f"Reply failed for {account}: {tweet['url']}")
-                        
-                            # Avoid detection by adding delay
-                            await human_like_delay(15000, 30000)  # Longer delay between replies
+                    logger.info(f"Generated reply for {account}: {reply_text}")
+                    
+                    # Send the reply
+                    if 'url' in tweet:
+                        success = await reply_to_tweet(page, tweet['url'], reply_text)
+                        if success:
+                            logger.info(f"Reply successfully sent to {account}: {tweet['url']}")
+                            # Mark this tweet as replied
+                            replied_tweets[tweet['url']] = time.time()
                         else:
-                            logger.error(f"No URL found for {account}'s tweet, can't reply")
+                            logger.error(f"Reply failed for {account}: {tweet['url']}")
+                        
+                        # Avoid detection by adding delay
+                        await human_like_delay(15000, 30000)  # Longer delay between replies
+                    else:
+                        logger.error(f"No URL found for {account}'s tweet, can't reply")
             else:
                 logger.info(f"No new tweets found for {account} in the last hour")
             
@@ -690,7 +690,7 @@ async def main():
             logger.info("Browser cleanup completed")
 
 # For testing different functions individually
-async # For testing different functions individually
+# For testing different functions individually
 async def test_mode():
     global browser, page
     test_feature = "combined"  # "browse", "check", "post", or "combined"

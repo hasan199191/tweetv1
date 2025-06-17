@@ -61,7 +61,11 @@ RUN mkdir -p /app/browser_data /app/browser_profile /app/logs /app/ms-playwright
     chmod -R 777 /app
 
 # Install xvfb for virtual display
-RUN printf '#!/bin/sh\nXvfb :99 -screen 0 1280x1024x24 &\nsleep 1\nexec "$@"\n' > /entrypoint.sh && \
+RUN printf '#!/bin/sh\n\
+    rm -f /tmp/.X99-lock\n\
+    Xvfb :99 -screen 0 1280x1024x24 -nolisten tcp -nolisten unix &\n\
+    sleep 1\n\
+    exec "$@"\n' > /entrypoint.sh && \
     chmod +x /entrypoint.sh
 
 # Install dependencies first
