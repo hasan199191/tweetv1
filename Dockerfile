@@ -1,10 +1,7 @@
 # Use Ubuntu 20.04 as base image
-FROM ubuntu:20.04
+FROM mcr.microsoft.com/playwright/python:v1.41.0-focal
 
-# Avoid prompts from apt
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Install Python 3.11 and other dependencies
+# Install Python 3.11
 RUN apt-get update && \
     apt-get install -y software-properties-common && \
     add-apt-repository ppa:deadsnakes/ppa && \
@@ -14,28 +11,6 @@ RUN apt-get update && \
     python3.11-distutils \
     python3.11-dev \
     python3-pip \
-    wget \
-    git \
-    curl \
-    unzip \
-    xvfb \
-    libnss3 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libxcursor1 \
-    libxi6 \
-    libxtst6 \
-    libpangocairo-1.0-0 \
-    libcairo2 \
-    libasound2 \
-    fonts-liberation \
     && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
 
 # Install pip for Python 3.11
@@ -45,9 +20,12 @@ RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py && \
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
-ENV PLAYWRIGHT_BROWSERS_PATH=/browsers
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 ENV DISPLAY=:99
 ENV RENDER=true
+
+# Ensure Xvfb is installed
+RUN apt-get install -y xvfb
 
 # Create required directories
 RUN mkdir -p /app /browsers /app/browser_data /app/browser_profile /app/logs && \

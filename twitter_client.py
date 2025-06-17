@@ -108,6 +108,52 @@ def type_like_human(page, selector, text):
 browser = None
 page = None
 
+async def initialize_playwright(retries=3):
+    """Initialize Playwright with retries and detailed error handling"""
+    for attempt in range(retries):
+        try:
+            logger.info(f"Initializing Playwright (attempt {attempt + 1}/{retries})")
+            playwright = await async_playwright().start()
+            
+            # Log environment info
+            logger.info(f"DISPLAY={os.environ.get('DISPLAY', 'not set')}")
+            logger.info(f"PLAYWRIGHT_BROWSERS_PATH={os.environ.get('PLAYWRIGHT_BROWSERS_PATH', 'not set')}")
+            
+            # Browser launch options
+            launch_options = {
+                "headless": os.environ.get("RENDER", "false").lower() == "true",
+                "args": [
+                    "--disable-dev-shm-usage",
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox"
+                ]
+            }
+            
+            logger.info("Launching browser with options: %s", launch_options)
+            browser = await playwright.chromium.launch_persistent_context(
+                user_data_dir=USER_DATA_DIR,
+                **launch_options
+            )
+            
+            if browser is None:
+                raise Exception("Browser launch returned None")
+                
+            logger.info("Browser launched successfully")
+            return playwright, browser
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize Playwright (attempt {attempt + 1}/{retries})")
+            logger.error(f"Error: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            
+            if attempt < retries - 1:
+                wait_time = (attempt + 1) * 5  # Exponential backoff
+                logger.info(f"Waiting {wait_time} seconds before retry...")
+                await asyncio.sleep(wait_time)
+            else:
+                logger.error("All attempts to initialize Playwright failed")
+                raise
+
 async def login(headless=False):
     """
     Login to Twitter with optional headless mode using Async API
