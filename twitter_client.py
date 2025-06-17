@@ -113,14 +113,45 @@ async def login(headless=False):
     """
     try:
         p = await async_playwright().start()
+        if not p:
+            raise Exception("Failed to start Playwright")
+
+        # Ensure browser data directory exists and is writable
+        browser_data_dir = os.path.abspath("./browser_data")
+        os.makedirs(browser_data_dir, exist_ok=True)
+
+        # Launch browser with custom arguments for better stability
         browser = await p.chromium.launch_persistent_context(
-            "./browser_data",
+            browser_data_dir,
             headless=headless,
-            viewport={'width': 1280, 'height': 720}
+            viewport={'width': 1280, 'height': 720},
+            args=[
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--disable-gpu',
+                '--disable-notifications',
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-breakpad',
+                '--disable-component-extensions-with-background-pages',
+                '--disable-features=TranslateUI,BlinkGenPropertyTrees',
+                '--disable-ipc-flooding-protection',
+                '--disable-renderer-backgrounding',
+                '--enable-automation',
+                '--password-store=basic'
+            ]
         )
+
+        if not browser:
+            raise Exception("Failed to launch browser")
 
         # Open a new page
         page = await browser.new_page()
+        if not page:
+            raise Exception("Failed to create new page")
+
         await page.set_default_timeout(45000)  # Increase timeout to 45 seconds
 
         logger.info("Checking login status...")
