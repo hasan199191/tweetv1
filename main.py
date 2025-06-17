@@ -639,29 +639,32 @@ def generate_content():
     content = f"Exciting updates from {selected_project}! Stay tuned for more developments. #web3 #crypto"
     return selected_project, content
 
+def generate_web3_content():
+    """Generate random web3 content"""
+    projects = ["Arbitrum", "zkSync", "Polygon", "Optimism"]
+    selected_project = random.choice(projects)
+    content = f"Exciting updates from {selected_project}! Stay tuned for more developments. #web3 #crypto"
+    return selected_project, content
+
 def main():
     try:
         logger.info("Browser initialization attempt 1 of 3")
         logger.info("Initializing browser...")
         
-        browser, page = login(headless=True)  # For Render, use headless mode
+        browser, page = login(headless=True)
         
         if browser and page:
             logger.info("Browser initialized and logged in to Twitter")
             
-            # Generate content
-            project, content = generate_content()
+            # Generate and post content
+            project, content = generate_web3_content()
             logger.info(f"Selected project: {project}")
             
-            # Post content
-            try:
-                success = post_tweet_thread_v2(page, content)
-                if success:
-                    logger.info(f"Successfully posted about {project}")
-                else:
-                    logger.error(f"Failed to post about {project}")
-            except Exception as e:
-                logger.error(f"Error posting content: {e}")
+            success = post_tweet_thread_v2(page, content)
+            if success:
+                logger.info(f"Successfully posted about {project}")
+            else:
+                logger.error(f"Failed to post about {project}")
                 
     except Exception as e:
         logger.error(f"Main error: {e}")

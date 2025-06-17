@@ -7,7 +7,6 @@ from playwright.sync_api import sync_playwright
 import re  # Import re for regular expression operations
 from email_reader import EmailReader
 import logging
-import traceback
 
 # Create directory to store browser session data
 USER_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "browser_profile")
@@ -107,13 +106,13 @@ browser = None
 page = None
 
 def cleanup_browser(browser):
-    """Cleanup browser instance"""
-    if browser:
-        try:
+    """Clean up browser instance"""
+    try:
+        if browser:
             browser.close()
             logger.info("Browser cleaned up successfully")
-        except Exception as e:
-            logger.error(f"Error cleaning up browser: {e}")
+    except Exception as e:
+        logger.error(f"Browser cleanup error: {e}")
 
 def login(headless=False):
     """Login to Twitter with headless option"""
